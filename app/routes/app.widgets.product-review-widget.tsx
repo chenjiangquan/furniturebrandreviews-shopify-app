@@ -125,7 +125,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return { ok: true, error: "", settings: savedSettings, savedAt: new Date().toISOString() };
     } catch (error) {
       console.error("Product review widget reset failed", error);
-      return { ok: false, error: "Settings could not be reset. Please run npm run setup and restart npm run dev.", settings: null, savedAt: "" };
+      return { ok: false, error: `Settings could not be reset: ${errorMessage(error)}`, settings: null, savedAt: "" };
     }
   }
 
@@ -150,22 +150,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       create: { shopDomain, ...supportedProductReviewSettingsData(defaultProductReviewWidgetSettings), ...supportedData }
     });
 
-    await prisma.$executeRawUnsafe(
-      `UPDATE ProductReviewSettings SET widgetBorderWidth = ?, widgetBorderRadius = ?, widgetBackgroundColor = ? WHERE shopDomain = ?`,
-      submittedWidgetBorderWidth,
-      submittedWidgetBorderRadius,
-      String(data.widgetBackgroundColor || defaultProductReviewWidgetSettings.widgetBackgroundColor),
-      shopDomain
-    );
-
     const savedSettings = await prisma.productReviewSettings.findUniqueOrThrow({ where: { shopDomain } });
 
     return { ok: true, error: "", settings: savedSettings, savedAt: new Date().toISOString() };
   } catch (error) {
     console.error("Product review widget settings save failed", error);
-    return { ok: false, error: "Settings could not be saved. Please run npm run setup and restart npm run dev.", settings: null, savedAt: "" };
+    return { ok: false, error: `Settings could not be saved: ${errorMessage(error)}`, settings: null, savedAt: "" };
   }
 };
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  return String(error || "Unknown error");
+}
 
 function supportedProductReviewSettingsData(data: ProductReviewSettingsInput) {
   return Object.fromEntries(

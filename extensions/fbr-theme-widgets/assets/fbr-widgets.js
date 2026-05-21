@@ -125,6 +125,7 @@
     const reviewPage = Math.min(currentReviewPage, reviewTotalPages);
     const reviews = allSortedReviews.slice((reviewPage - 1) * reviewsPerPage, reviewPage * reviewsPerPage);
     const questions = data.questions || [];
+    const hasApprovedReviews = (data.reviews || []).length > 0;
     const breakdown = buildRatingBreakdown(data.reviews || []);
     const totalBreakdown = Math.max(Object.values(breakdown).reduce((total, count) => total + Number(count || 0), 0), 1);
     const layoutType = ["standard", "cards", "carousel"].includes(settings.layoutType) ? settings.layoutType : "standard";
@@ -183,14 +184,14 @@
             ${settings.showAskQuestionButton ? `<button class="fbr-button fbr-button-secondary" type="button" data-fbr-open-question style="background:${escapeAttr(settings.cardBackgroundColor)}; color:${escapeAttr(settings.textColor)}; border-color:${escapeAttr(settings.borderColor)};">Ask a question</button>` : ""}
           </div>
         </div>
-        ${settings.showAiSummary ? `
+        ${settings.showAiSummary && hasApprovedReviews ? `
           <div class="fbr-review-item fbr-ai-summary" style="background:#f7faf9; border-color:${escapeAttr(settings.borderColor)};">
             <strong class="fbr-ai-title">AI review summary</strong>
             <p style="color:${escapeAttr(settings.lighterTextColor)}">Customers frequently highlight product quality, sturdy materials, clear delivery updates, and helpful support before and after purchase. Recent reviews suggest shoppers value accurate product details, responsive communication, and furniture that arrives looking consistent with the photos and samples.</p>
             <p class="fbr-ai-note" style="color:${escapeAttr(settings.lighterTextColor)}">*AI-powered review summary based on recent customer reviews</p>
           </div>
         ` : ""}
-        ${settings.showReviewHighlights ? `
+        ${settings.showReviewHighlights && hasApprovedReviews ? `
           <div class="fbr-row">
             ${["Quality materials", "Helpful service", "Careful delivery"].map((highlight) => `<span class="fbr-verified">${highlight}</span>`).join("")}
           </div>

@@ -69,9 +69,6 @@ const defaultBrandProfile = {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
-  let productSettings = {
-    productReviewWidgetEnabled: true
-  };
   let widgetSettings = {
     brandName: defaultBrandProfile.brandName,
     brandSlug: defaultBrandProfile.brandSlug,
@@ -85,13 +82,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let installedBlocks = emptyInstalledBlocks;
 
   try {
-    const [loadedProductSettings, loadedWidgetSettings, loadedGoogleSeoSettings, loadedInstalledBlocks] = await Promise.all([
+    const [, loadedWidgetSettings, loadedGoogleSeoSettings, loadedInstalledBlocks] = await Promise.all([
       getProductReviewWidgetSettings(shopDomain),
       prisma.widgetSettings.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } }),
       prisma.googleSeoSettings.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } }),
       detectInstalledThemeBlocks(session.shop, session.accessToken)
     ]);
-    productSettings = loadedProductSettings;
     widgetSettings = loadedWidgetSettings;
     googleSeoSettings = loadedGoogleSeoSettings;
     installedBlocks = loadedInstalledBlocks;
@@ -110,10 +106,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     googleSeoSettings.googleShoppingEnabled;
 
   return {
-    installedBlocks: {
-      ...installedBlocks,
-      reviewWidget: productSettings.productReviewWidgetEnabled || installedBlocks.reviewWidget
-    },
+    installedBlocks,
     googleSeoInstalled,
     themeEditorUrl,
     brandProfile: {
@@ -318,7 +311,7 @@ async function detectInstalledThemeBlocks(shop: string, accessToken?: string | n
     const assetsJson = await assetsResponse.json() as { assets?: Array<{ key: string }> };
     const jsonAssetKeys = (assetsJson.assets || [])
       .map((asset) => asset.key)
-      .filter((key) => (key.startsWith("templates/") || key.startsWith("sections/")) && key.endsWith(".json"));
+      .filter((key) => key.startsWith("templates/product") && key.endsWith(".json"));
 
     const assetContents = await Promise.all(jsonAssetKeys.map(async (key) => {
       const assetUrl = new URL(`https://${shop}/admin/api/2025-04/themes/${liveTheme.id}/assets.json`);
