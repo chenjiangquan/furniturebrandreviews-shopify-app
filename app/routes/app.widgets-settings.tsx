@@ -1,5 +1,5 @@
-import type { LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
+import { useFetcher, useLoaderData } from "@remix-run/react";
 import * as React from "react";
 import {
   Badge,
@@ -12,7 +12,8 @@ import {
   InlineStack,
   Modal,
   Page,
-  Text
+  Text,
+  TextField
 } from "@shopify/polaris";
 import prisma from "~/db.server";
 import { getProductReviewWidgetSettings } from "~/models/reviews.server";
@@ -61,9 +62,9 @@ const brandTrustWidgets: BrandTrustWidget[] = [
 ];
 
 const defaultBrandProfile = {
-  brandName: "Weilai Concept",
-  brandSlug: "weilai-concept",
-  brandProfileUrl: "https://www.furniturebrandreviews.com/review/weilai-concept"
+  brandName: "",
+  brandSlug: "",
+  brandProfileUrl: ""
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -96,10 +97,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const themeEditorUrl = `https://${session.shop}/admin/themes/current/editor?context=apps&template=product`;
-  const brandSlug = widgetSettings.brandSlug || brandSlugFromProfileUrl(widgetSettings.profileUrl) || defaultBrandProfile.brandSlug;
-  const brandProfileUrl = widgetSettings.profileUrl?.includes("/review/")
-    ? widgetSettings.profileUrl
-    : defaultBrandProfile.brandProfileUrl;
+  const brandSlug = widgetSettings.brandSlug || brandSlugFromProfileUrl(widgetSettings.profileUrl) || "";
+  const brandProfileUrl = widgetSettings.profileUrl?.includes("/review/") ? widgetSettings.profileUrl : "";
   const googleSeoInstalled =
     googleSeoSettings.reviewsSiteEnabled &&
     googleSeoSettings.seoRichSnippetsEnabled &&
@@ -110,7 +109,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     googleSeoInstalled,
     themeEditorUrl,
     brandProfile: {
-      brandName: widgetSettings.brandName || defaultBrandProfile.brandName,
+      brandName: widgetSettings.brandName || "",
       brandSlug,
       brandProfileUrl
     },
@@ -118,9 +117,48 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const form = await request.formData();
+  const intent = String(form.get("intent") || "");
+
+  if (intent !== "saveBrandProfile") {
+    return { ok: false, error: "Unsupported action.", brandProfile: null };
+  }
+
+  const brandName = String(form.get("brandName") || "").trim();
+  if (!brandName) {
+    return { ok: false, error: "Enter your brand name before installing this widget.", brandProfile: null };
+  }
+
+  const brandSlug = slugifyBrandName(brandName);
+  const profileUrl = `https://www.furniturebrandreviews.com/review/${brandSlug}`;
+  const settings = await prisma.widgetSettings.upsert({
+    where: { shopDomain: session.shop },
+    update: { brandName, brandSlug, profileUrl },
+    create: { shopDomain: session.shop, brandName, brandSlug, profileUrl }
+  });
+
+  return {
+    ok: true,
+    error: "",
+    brandProfile: {
+      brandName: settings.brandName,
+      brandSlug: settings.brandSlug,
+      brandProfileUrl: settings.profileUrl
+    }
+  };
+};
+
 export default function WidgetsSettings() {
   const { installedBlocks, googleSeoInstalled, themeEditorUrl, brandProfile, brandProfileExists } = useLoaderData<typeof loader>();
+  const brandFetcher = useFetcher<typeof action>();
   const [manualWidget, setManualWidget] = React.useState<BrandTrustWidget | null>(null);
+  const [brandName, setBrandName] = React.useState(brandProfile.brandName);
+  const savedBrandProfile = brandFetcher.data?.ok && brandFetcher.data.brandProfile
+    ? brandFetcher.data.brandProfile
+    : brandProfile;
+  const brandSlug = savedBrandProfile.brandSlug;
 
   return (
     <Page
@@ -148,14 +186,43 @@ export default function WidgetsSettings() {
         </WidgetSection>
 
         <WidgetSection title="Brand Trust Widgets">
+          <Card>
+            <brandFetcher.Form method="post">
+              <input type="hidden" name="intent" value="saveBrandProfile" />
+              <BlockStack gap="300">
+                <Text as="h3" variant="headingMd">FurnitureBrandReviews business profile</Text>
+                <Text as="p" tone="subdued">
+                  Make sure your business has a profile on FurnitureBrandReviews.com before installing this widget, otherwise the widget may not display any reviews.
+                </Text>
+                <InlineStack gap="300" blockAlign="end">
+                  <div style={{ flex: 1, minWidth: 260 }}>
+                    <TextField
+                      label="Brand name"
+                      name="brandName"
+                      value={brandName}
+                      onChange={setBrandName}
+                      autoComplete="organization"
+                      placeholder="Enter your brand name"
+                    />
+                  </div>
+                  <Button submit variant="primary" loading={brandFetcher.state !== "idle"}>Save brand name</Button>
+                </InlineStack>
+                {brandSlug ? <Text as="p" tone="subdued">Brand slug: {brandSlug}</Text> : null}
+                {brandFetcher.data?.ok ? <Badge tone="success">Brand name saved</Badge> : null}
+                {brandFetcher.data && !brandFetcher.data.ok ? <Text as="p" tone="critical">{brandFetcher.data.error}</Text> : null}
+              </BlockStack>
+            </brandFetcher.Form>
+          </Card>
           {brandTrustWidgets.map((widget) => {
             const installed = installedBlocks[widget.key];
+            const canInstall = Boolean(brandSlug);
             return (
             <WidgetCard key={widget.title} title={widget.title} description={widget.description} image={widget.image}>
-              <Badge tone={installed ? "success" : brandProfileExists ? "attention" : "warning"}>{installed ? "Installed" : brandProfileExists ? "Ready to install" : "Not connected"}</Badge>
+              <Badge tone={installed ? "success" : canInstall ? "attention" : "warning"}>{installed ? "Installed" : canInstall ? "Ready to install" : "Brand name required"}</Badge>
+              {!canInstall ? <Text as="p" tone="critical">Enter your brand name before installing this widget.</Text> : null}
               <ButtonGroup>
-                <Button url={themeEditorUrl} target="_blank">{installed ? "Uninstall" : "Install"}</Button>
-                <Button onClick={() => setManualWidget(widget)}>Manual install</Button>
+                <Button url={themeEditorUrl} target="_blank" disabled={!canInstall}>{installed ? "Uninstall" : "Install"}</Button>
+                <Button onClick={() => setManualWidget(widget)} disabled={!canInstall}>Manual install</Button>
               </ButtonGroup>
             </WidgetCard>
             );
@@ -177,7 +244,7 @@ export default function WidgetsSettings() {
 
         <ManualInstallModal
           widget={manualWidget}
-          brandSlug={brandProfile.brandSlug}
+          brandSlug={brandSlug}
           onClose={() => setManualWidget(null)}
         />
       </BlockStack>
@@ -278,6 +345,16 @@ function brandSlugFromProfileUrl(profileUrl: string | null) {
   }
 }
 
+function slugifyBrandName(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
 type InstalledThemeBlocks = {
   reviewWidget: boolean;
   starRating: boolean;
@@ -311,7 +388,7 @@ async function detectInstalledThemeBlocks(shop: string, accessToken?: string | n
     const assetsJson = await assetsResponse.json() as { assets?: Array<{ key: string }> };
     const jsonAssetKeys = (assetsJson.assets || [])
       .map((asset) => asset.key)
-      .filter((key) => key.startsWith("templates/product") && key.endsWith(".json"));
+      .filter((key) => (key.startsWith("templates/") || key.startsWith("sections/")) && key.endsWith(".json"));
 
     const assetContents = await Promise.all(jsonAssetKeys.map(async (key) => {
       const assetUrl = new URL(`https://${shop}/admin/api/2025-04/themes/${liveTheme.id}/assets.json`);
@@ -321,16 +398,46 @@ async function detectInstalledThemeBlocks(shop: string, accessToken?: string | n
       const json = await response.json() as { asset?: { value?: string } };
       return json.asset?.value || "";
     }));
-    const themeJson = assetContents.join("\n").toLowerCase();
+    const appBlockTypes = assetContents.flatMap(extractThemeBlockTypes);
 
     return {
-      reviewWidget: themeJson.includes("product-reviews-widget") || themeJson.includes("review-widget"),
-      starRating: themeJson.includes("product-star-rating"),
-      brandCarousel: themeJson.includes("fbr-brand-review-carousel") || themeJson.includes("brand-review-carousel"),
-      brandMicro: themeJson.includes("fbr-brand-micro-trust-badge") || themeJson.includes("fbr-micro")
+      reviewWidget: hasAppBlock(appBlockTypes, "product-reviews-widget"),
+      starRating: hasAppBlock(appBlockTypes, "product-star-rating"),
+      brandCarousel: hasAppBlock(appBlockTypes, "fbr-brand-review-carousel"),
+      brandMicro: hasAppBlock(appBlockTypes, "fbr-brand-micro-trust-badge")
     };
   } catch (error) {
     console.warn("Unable to detect installed theme app blocks", error);
     return emptyInstalledBlocks;
   }
+}
+
+function extractThemeBlockTypes(value: string) {
+  if (!value) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    const types: string[] = [];
+    const visit = (node: unknown) => {
+      if (!node || typeof node !== "object") return;
+      if (Array.isArray(node)) {
+        node.forEach(visit);
+        return;
+      }
+      const record = node as Record<string, unknown>;
+      if (typeof record.type === "string" && record.type.includes("shopify://apps/")) {
+        types.push(record.type.toLowerCase());
+      }
+      Object.values(record).forEach(visit);
+    };
+    visit(parsed);
+    return types;
+  } catch {
+    return [];
+  }
+}
+
+function hasAppBlock(types: string[], blockHandle: string) {
+  const needle = `/blocks/${blockHandle}/`;
+  return types.some((type) => type.includes(needle));
 }
