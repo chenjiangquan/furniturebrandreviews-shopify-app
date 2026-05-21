@@ -1,0 +1,21 @@
+name = "Furniture Brand Reviews"
+client_id = "db5beafee602d16825792984fa641886"
+application_url = "https://localhost:3458"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+dev_store_url = "furniture-brand-reviews-dev.myshopify.com"
+
+[access_scopes]
+scopes = "read_products,read_themes"
+
+[auth]
+redirect_urls = [
+  "https://localhost:3458/auth/callback",
+  "https://localhost:3458/auth/shopify/callback",
+  "https://localhost:3458/api/auth/callback"
+]
+
+[webhooks]
+api_version = "2025-10"
