@@ -1,5 +1,5 @@
 name = "Furniture Brand Reviews Widgets"
-type = "theme"
+type = "theme_app_extension"
 uid = "e40fd515-132a-c937-be21-7ded55067e8bebad5d84"
 
 [settings]

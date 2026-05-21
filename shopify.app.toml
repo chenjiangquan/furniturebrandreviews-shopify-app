@@ -1,6 +1,6 @@
 name = "Furniture Brand Reviews"
 client_id = "db5beafee602d16825792984fa641886"
-application_url = "https://recorder-irrigation-shed-foam.trycloudflare.com"
+application_url = "https://furniturebrandreviews-shopify-app-production.up.railway.app"
 embedded = true
 
 [build]
@@ -12,9 +12,9 @@ scopes = "read_products,read_themes"
 
 [auth]
 redirect_urls = [
-  "https://recorder-irrigation-shed-foam.trycloudflare.com/auth/callback",
-  "https://recorder-irrigation-shed-foam.trycloudflare.com/auth/shopify/callback",
-  "https://recorder-irrigation-shed-foam.trycloudflare.com/api/auth/callback"
+  "https://furniturebrandreviews-shopify-app-production.up.railway.app/auth/callback",
+  "https://furniturebrandreviews-shopify-app-production.up.railway.app/auth/shopify/callback",
+  "https://furniturebrandreviews-shopify-app-production.up.railway.app/api/auth/callback"
 ]
 
 [webhooks]
@@ -25,6 +25,6 @@ api_version = "2025-10"
   uri = "/webhooks/app/uninstalled"
 
 [app_proxy]
-url = "https://recorder-irrigation-shed-foam.trycloudflare.com"
+url = "https://furniturebrandreviews-shopify-app-production.up.railway.app"
 subpath = "fbr"
 prefix = "apps"
