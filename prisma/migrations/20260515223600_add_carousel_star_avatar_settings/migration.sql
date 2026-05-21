@@ -1,0 +1,13 @@
+ALTER TABLE "ProductReviewSettings" ADD COLUMN "starBackgroundColor" TEXT NOT NULL DEFAULT '#00b67a';
+ALTER TABLE "ProductReviewSettings" ADD COLUMN "starBorderColor" TEXT NOT NULL DEFAULT '#00b67a';
+ALTER TABLE "ProductReviewSettings" ADD COLUMN "starBorderRadius" INTEGER NOT NULL DEFAULT 2;
+ALTER TABLE "ProductReviewSettings" ADD COLUMN "starSize" INTEGER NOT NULL DEFAULT 22;
+ALTER TABLE "ProductReviewSettings" ADD COLUMN "starGap" INTEGER NOT NULL DEFAULT 2;
+ALTER TABLE "ProductReviewSettings" ADD COLUMN "avatarBackgroundColor" TEXT NOT NULL DEFAULT '#eef4ff';
+ALTER TABLE "ProductReviewSettings" ADD COLUMN "avatarTextColor" TEXT NOT NULL DEFAULT '#24438f';
+ALTER TABLE "ProductReviewSettings" ADD COLUMN "avatarSize" INTEGER NOT NULL DEFAULT 28;
+ALTER TABLE "ProductReviewSettings" ADD COLUMN "carouselCardsPerRow" INTEGER NOT NULL DEFAULT 3;
+ALTER TABLE "ProductReviewSettings" ADD COLUMN "carouselAutoSlide" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "ProductReviewSettings" ADD COLUMN "carouselAutoplaySpeed" INTEGER NOT NULL DEFAULT 4;
+ALTER TABLE "ProductReviewSettings" ADD COLUMN "carouselShowArrows" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "ProductReviewSettings" ADD COLUMN "carouselShowDots" BOOLEAN NOT NULL DEFAULT true;

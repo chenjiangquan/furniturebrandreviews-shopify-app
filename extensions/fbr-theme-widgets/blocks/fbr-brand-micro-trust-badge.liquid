@@ -1,0 +1,24 @@
+{% assign brand_slug = block.settings.brand_slug | strip %}
+
+{% if brand_slug != blank %}
+  {% if block.settings.title != blank %}
+    <h3>{{ block.settings.title | escape }}</h3>
+  {% endif %}
+  <div class="fbr-widget" data-brand="{{ brand_slug | escape }}" data-layout="micro"></div>
+  <script async src="https://www.furniturebrandreviews.com/widget.js"></script>
+{% else %}
+  <div style="padding: 16px; border: 1px solid #dcdfe4; border-radius: 8px;">
+    Please connect your FurnitureBrandReviews business profile first.
+  </div>
+{% endif %}
+
+{% schema %}
+{
+  "name": "FBR Micro Badge",
+  "target": "section",
+  "settings": [
+    { "type": "text", "id": "brand_slug", "label": "Brand slug", "default": "weilai-concept" },
+    { "type": "text", "id": "title", "label": "Optional title" }
+  ]
+}
+{% endschema %}

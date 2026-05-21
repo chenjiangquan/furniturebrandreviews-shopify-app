@@ -1,0 +1,150 @@
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
+import { redirect } from "@remix-run/node";
+import { Form, useLoaderData, useNavigation } from "@remix-run/react";
+import {
+  BlockStack,
+  Button,
+  Card,
+  InlineGrid,
+  Page
+} from "@shopify/polaris";
+import prisma from "~/db.server";
+import { authenticate } from "~/shopify.server";
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const shopDomain = session.shop;
+  const [widgetSettings, productSettings, brandData] = await Promise.all([
+    prisma.widgetSettings.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } }),
+    prisma.productReviewSettings.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } }),
+    prisma.brandWidgetData.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } })
+  ]);
+  return { widgetSettings, productSettings, brandData };
+};
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const form = await request.formData();
+  const shopDomain = session.shop;
+
+  await Promise.all([
+    prisma.widgetSettings.upsert({
+      where: { shopDomain },
+      update: {
+        brandName: String(form.get("brandName") || "Weilai Concept"),
+        brandWebsite: String(form.get("brandWebsite") || ""),
+        profileUrl: String(form.get("profileUrl") || ""),
+        showAiSummary: form.get("showAiSummary") === "on",
+        showTotalReviewCount: form.get("showTotalReviewCount") === "on",
+        showRatingBreakdown: form.get("showRatingBreakdown") === "on",
+        primaryColor: String(form.get("primaryColor") || "#1f6f64"),
+        starColor: String(form.get("starColor") || "#f5a623"),
+        borderRadius: Number(form.get("borderRadius") || 8),
+        widgetLayout: String(form.get("widgetLayout") || "compact"),
+        carouselAutoplay: form.get("carouselAutoplay") === "on",
+        floatingBadgePosition: String(form.get("floatingBadgePosition") || "bottom-right")
+      },
+      create: { shopDomain }
+    }),
+    prisma.productReviewSettings.upsert({
+      where: { shopDomain },
+      update: {
+        productReviewsEnabled: form.get("productReviewsEnabled") === "on",
+        autoApproveReviews: form.get("autoApproveReviews") === "on",
+        requireEmail: form.get("requireEmail") === "on",
+        showVerifiedBadge: form.get("showVerifiedBadge") === "on",
+        allowPhotoReviews: form.get("allowPhotoReviews") === "on",
+        emailNotificationEnabled: form.get("emailNotificationEnabled") === "on"
+      },
+      create: { shopDomain }
+    }),
+    prisma.brandWidgetData.upsert({
+      where: { shopDomain },
+      update: {
+        brandName: String(form.get("brandName") || "Weilai Concept"),
+        profileUrl: String(form.get("profileUrl") || ""),
+        aiSummary: String(form.get("aiSummary") || "")
+      },
+      create: { shopDomain }
+    })
+  ]);
+
+  return redirect("/app/settings");
+};
+
+export default function Settings() {
+  const { widgetSettings, productSettings, brandData } = useLoaderData<typeof loader>();
+  const navigation = useNavigation();
+
+  return (
+    <Page title="Settings">
+      <Form method="post">
+        <InlineGrid columns={{ xs: 1, md: 3 }} gap="400">
+          <Card>
+            <BlockStack gap="300">
+              <Field label="Brand name" name="brandName" value={widgetSettings.brandName} />
+              <Field label="Brand website" name="brandWebsite" value={widgetSettings.brandWebsite || ""} type="url" />
+              <Field label="FurnitureBrandReviews profile URL" name="profileUrl" value={widgetSettings.profileUrl} type="url" />
+              <label><span>AI summary</span><textarea name="aiSummary" rows={4} defaultValue={brandData.aiSummary} /></label>
+              <Check label="Show AI summary" name="showAiSummary" checked={widgetSettings.showAiSummary} />
+              <Check label="Show total review count" name="showTotalReviewCount" checked={widgetSettings.showTotalReviewCount} />
+              <Check label="Show rating breakdown" name="showRatingBreakdown" checked={widgetSettings.showRatingBreakdown} />
+            </BlockStack>
+          </Card>
+
+          <Card>
+            <BlockStack gap="300">
+              <Check label="Product reviews enabled" name="productReviewsEnabled" checked={productSettings.productReviewsEnabled} />
+              <Check label="Auto approve reviews" name="autoApproveReviews" checked={productSettings.autoApproveReviews} />
+              <Check label="Require email" name="requireEmail" checked={productSettings.requireEmail} />
+              <Check label="Show verified badge" name="showVerifiedBadge" checked={productSettings.showVerifiedBadge} />
+              <Check label="Allow photo reviews" name="allowPhotoReviews" checked={productSettings.allowPhotoReviews} />
+              <Check label="Email notification enabled" name="emailNotificationEnabled" checked={productSettings.emailNotificationEnabled} />
+            </BlockStack>
+          </Card>
+
+          <Card>
+            <BlockStack gap="300">
+              <Field label="Primary color" name="primaryColor" value={widgetSettings.primaryColor} />
+              <Field label="Star color" name="starColor" value={widgetSettings.starColor} />
+              <Field label="Border radius" name="borderRadius" value={String(widgetSettings.borderRadius)} type="number" />
+              <label>
+                <span>Widget layout</span>
+                <select name="widgetLayout" defaultValue={widgetSettings.widgetLayout}>
+                  <option value="compact">Compact</option>
+                  <option value="comfortable">Comfortable</option>
+                </select>
+              </label>
+              <Check label="Carousel autoplay" name="carouselAutoplay" checked={widgetSettings.carouselAutoplay} />
+              <label>
+                <span>Floating badge position</span>
+                <select name="floatingBadgePosition" defaultValue={widgetSettings.floatingBadgePosition}>
+                  <option value="bottom-right">Bottom right</option>
+                  <option value="bottom-left">Bottom left</option>
+                </select>
+              </label>
+              <Button submit variant="primary" loading={navigation.state !== "idle"}>Save settings</Button>
+            </BlockStack>
+          </Card>
+        </InlineGrid>
+      </Form>
+    </Page>
+  );
+}
+
+function Field({ label, name, value, type = "text" }: { label: string; name: string; value: string; type?: string }) {
+  return (
+    <label>
+      <span>{label}</span>
+      <input name={name} type={type} defaultValue={value} />
+    </label>
+  );
+}
+
+function Check({ label, name, checked }: { label: string; name: string; checked: boolean }) {
+  return (
+    <label>
+      <input type="checkbox" name={name} defaultChecked={checked} /> {label}
+    </label>
+  );
+}

@@ -1,0 +1,29 @@
+{{ 'fbr-widgets.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'fbr-widgets.js' | asset_url }}" defer></script>
+
+<div
+  class="fbr-widget"
+  style="--fbr-primary: {{ block.settings.primary_color }}; --fbr-star: {{ block.settings.star_color }}; --fbr-radius: {{ block.settings.border_radius }}px;"
+  data-fbr-product-reviews
+  data-api-base="{{ block.settings.api_base_url }}"
+  data-shop="{{ shop.permanent_domain }}"
+  data-product-id="{{ product.id }}"
+  data-product-handle="{{ product.handle }}"
+  data-product-title="{{ product.title | escape }}"
+></div>
+
+{% schema %}
+{
+  "name": "Review Widget",
+  "target": "section",
+  "enabled_on": {
+    "templates": ["product", "index"]
+  },
+  "settings": [
+    { "type": "text", "id": "api_base_url", "label": "App proxy base URL", "default": "/apps/fbr" },
+    { "type": "color", "id": "primary_color", "label": "Primary color", "default": "#1f6f64" },
+    { "type": "color", "id": "star_color", "label": "Star color", "default": "#f5a623" },
+    { "type": "range", "id": "border_radius", "label": "Border radius", "min": 0, "max": 24, "step": 1, "default": 8 }
+  ]
+}
+{% endschema %}

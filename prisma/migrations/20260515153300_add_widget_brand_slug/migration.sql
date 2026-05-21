@@ -1,0 +1,1 @@
+ALTER TABLE "WidgetSettings" ADD COLUMN "brandSlug" TEXT NOT NULL DEFAULT '';
