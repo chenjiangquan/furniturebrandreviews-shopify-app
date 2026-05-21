@@ -9,9 +9,9 @@ CREATE TABLE "ProductQuestion" (
     "question" TEXT NOT NULL,
     "answer" TEXT,
     "status" TEXT NOT NULL DEFAULT 'PENDING',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "answeredAt" DATETIME,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "answeredAt" TIMESTAMP(3),
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "ProductQuestion_shopDomain_fkey" FOREIGN KEY ("shopDomain") REFERENCES "Shop" ("shopDomain") ON DELETE CASCADE ON UPDATE CASCADE
 );
 

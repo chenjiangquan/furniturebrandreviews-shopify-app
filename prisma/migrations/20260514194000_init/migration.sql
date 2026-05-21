@@ -5,7 +5,7 @@ CREATE TABLE "Session" (
     "state" TEXT NOT NULL,
     "isOnline" BOOLEAN NOT NULL DEFAULT false,
     "scope" TEXT,
-    "expires" DATETIME,
+    "expires" TIMESTAMP(3),
     "accessToken" TEXT NOT NULL,
     "userId" BIGINT,
     "firstName" TEXT,
@@ -23,9 +23,9 @@ CREATE TABLE "Shop" (
     "shopDomain" TEXT NOT NULL,
     "accessToken" TEXT,
     "scope" TEXT,
-    "installedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "installedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL
 );
 
 -- CreateTable
@@ -44,8 +44,8 @@ CREATE TABLE "WidgetSettings" (
     "widgetLayout" TEXT NOT NULL DEFAULT 'compact',
     "carouselAutoplay" BOOLEAN NOT NULL DEFAULT true,
     "floatingBadgePosition" TEXT NOT NULL DEFAULT 'bottom-right',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "WidgetSettings_shopDomain_fkey" FOREIGN KEY ("shopDomain") REFERENCES "Shop" ("shopDomain") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -60,8 +60,8 @@ CREATE TABLE "BrandWidgetData" (
     "aiSummary" TEXT NOT NULL DEFAULT 'Customers often mention delivery, product quality and customer support.',
     "ratingBreakdown" TEXT NOT NULL DEFAULT '{"5":172,"4":44,"3":14,"2":5,"1":3}',
     "profileUrl" TEXT NOT NULL DEFAULT 'https://www.furniturebrandreviews.com/review/weilai-concept',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "BrandWidgetData_shopDomain_fkey" FOREIGN KEY ("shopDomain") REFERENCES "Shop" ("shopDomain") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -74,9 +74,9 @@ CREATE TABLE "BrandReview" (
     "title" TEXT NOT NULL,
     "content" TEXT NOT NULL,
     "verifiedPurchase" BOOLEAN NOT NULL DEFAULT false,
-    "reviewDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "reviewDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "BrandReview_shopDomain_fkey" FOREIGN KEY ("shopDomain") REFERENCES "Shop" ("shopDomain") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -94,8 +94,8 @@ CREATE TABLE "ProductReview" (
     "content" TEXT NOT NULL,
     "verifiedPurchase" BOOLEAN NOT NULL DEFAULT false,
     "status" TEXT NOT NULL DEFAULT 'PENDING',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "ProductReview_shopDomain_fkey" FOREIGN KEY ("shopDomain") REFERENCES "Shop" ("shopDomain") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -109,8 +109,8 @@ CREATE TABLE "ProductReviewSettings" (
     "showVerifiedBadge" BOOLEAN NOT NULL DEFAULT true,
     "allowPhotoReviews" BOOLEAN NOT NULL DEFAULT false,
     "emailNotificationEnabled" BOOLEAN NOT NULL DEFAULT false,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "ProductReviewSettings_shopDomain_fkey" FOREIGN KEY ("shopDomain") REFERENCES "Shop" ("shopDomain") ON DELETE CASCADE ON UPDATE CASCADE
 );
 

@@ -1,4 +1,4 @@
-import type { ProductQuestion, ProductReview } from "@prisma/client";
+import { Prisma, type ProductQuestion, type ProductReview } from "@prisma/client";
 import prisma from "~/db.server";
 import { defaultProductReviewWidgetSettings } from "~/models/product-review-widget-settings";
 
@@ -26,12 +26,23 @@ export async function ensureShop(shopDomain: string) {
 
 export async function getProductReviewWidgetSettings(shopDomain: string) {
   await ensureShop(shopDomain);
+  const supportedProductReviewSettingsData = Object.fromEntries(
+    Object.entries(defaultProductReviewWidgetSettings).filter(([field]) => productReviewSettingsFieldNames.has(field))
+  );
   return prisma.productReviewSettings.upsert({
     where: { shopDomain },
     update: {},
-    create: { shopDomain, ...defaultProductReviewWidgetSettings }
+    create: { shopDomain, ...supportedProductReviewSettingsData }
   });
 }
+
+const productReviewSettingsFieldNames = new Set(
+  Prisma.dmmf.datamodel.models
+    .find((model) => model.name === "ProductReviewSettings")
+    ?.fields
+    .filter((field) => field.kind === "scalar" && !["id", "shopDomain", "createdAt", "updatedAt"].includes(field.name))
+    .map((field) => field.name) || []
+);
 
 export async function normalizeLegacyReviewStatuses(shopDomain: string) {
   await prisma.productReview.updateMany({

@@ -11,8 +11,8 @@ CREATE TABLE "GoogleSeoSettings" (
     "seoRichSnippetsEnabled" BOOLEAN NOT NULL DEFAULT false,
     "googleShoppingEnabled" BOOLEAN NOT NULL DEFAULT false,
     "reviewsSiteEnabled" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "GoogleSeoSettings_shopDomain_fkey" FOREIGN KEY ("shopDomain") REFERENCES "Shop" ("shopDomain") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -20,8 +20,8 @@ CREATE TABLE "SubscriptionSettings" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "shopDomain" TEXT NOT NULL,
     "plan" TEXT NOT NULL DEFAULT 'FREE',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "SubscriptionSettings_shopDomain_fkey" FOREIGN KEY ("shopDomain") REFERENCES "Shop" ("shopDomain") ON DELETE CASCADE ON UPDATE CASCADE
 );
 

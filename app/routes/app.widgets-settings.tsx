@@ -69,12 +69,36 @@ const defaultBrandProfile = {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
-  const [productSettings, widgetSettings, googleSeoSettings, installedBlocks] = await Promise.all([
-    getProductReviewWidgetSettings(shopDomain),
-    prisma.widgetSettings.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } }),
-    prisma.googleSeoSettings.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } }),
-    detectInstalledThemeBlocks(session.shop, session.accessToken)
-  ]);
+  let productSettings = {
+    productReviewWidgetEnabled: true
+  };
+  let widgetSettings = {
+    brandName: defaultBrandProfile.brandName,
+    brandSlug: defaultBrandProfile.brandSlug,
+    profileUrl: defaultBrandProfile.brandProfileUrl
+  };
+  let googleSeoSettings = {
+    reviewsSiteEnabled: false,
+    seoRichSnippetsEnabled: false,
+    googleShoppingEnabled: false
+  };
+  let installedBlocks = emptyInstalledBlocks;
+
+  try {
+    const [loadedProductSettings, loadedWidgetSettings, loadedGoogleSeoSettings, loadedInstalledBlocks] = await Promise.all([
+      getProductReviewWidgetSettings(shopDomain),
+      prisma.widgetSettings.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } }),
+      prisma.googleSeoSettings.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } }),
+      detectInstalledThemeBlocks(session.shop, session.accessToken)
+    ]);
+    productSettings = loadedProductSettings;
+    widgetSettings = loadedWidgetSettings;
+    googleSeoSettings = loadedGoogleSeoSettings;
+    installedBlocks = loadedInstalledBlocks;
+  } catch (error) {
+    console.error("Widgets Settings loader failed; rendering fallback UI", error);
+  }
+
   const themeEditorUrl = `https://${session.shop}/admin/themes/current/editor?context=apps&template=product`;
   const brandSlug = widgetSettings.brandSlug || brandSlugFromProfileUrl(widgetSettings.profileUrl) || defaultBrandProfile.brandSlug;
   const brandProfileUrl = widgetSettings.profileUrl?.includes("/review/")

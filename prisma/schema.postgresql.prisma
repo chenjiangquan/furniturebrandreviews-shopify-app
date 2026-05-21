@@ -1,0 +1,237 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+}
+
+model Shop {
+  id          String   @id @default(cuid())
+  shopDomain  String   @unique
+  accessToken String?
+  scope       String?
+  installedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  widgetSettings       WidgetSettings?
+  brandWidgetData      BrandWidgetData?
+  productReviewSettings ProductReviewSettings?
+  googleSeoSettings    GoogleSeoSettings?
+  subscriptionSettings SubscriptionSettings?
+  brandReviews         BrandReview[]
+  productReviews       ProductReview[]
+  productQuestions     ProductQuestion[]
+}
+
+model WidgetSettings {
+  id                    String   @id @default(cuid())
+  shopDomain            String   @unique
+  brandName             String   @default("Weilai Concept")
+  brandSlug             String   @default("")
+  brandWebsite          String?
+  profileUrl            String   @default("https://www.furniturebrandreviews.com")
+  showAiSummary         Boolean  @default(true)
+  showTotalReviewCount  Boolean  @default(true)
+  showRatingBreakdown   Boolean  @default(true)
+  primaryColor          String   @default("#1f6f64")
+  starColor             String   @default("#f5a623")
+  borderRadius          Int      @default(8)
+  widgetLayout          String   @default("compact")
+  carouselAutoplay      Boolean  @default(true)
+  floatingBadgePosition String   @default("bottom-right")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
+}
+
+model BrandWidgetData {
+  id              String   @id @default(cuid())
+  shopDomain      String   @unique
+  brandName       String   @default("Weilai Concept")
+  rating          Float    @default(4.7)
+  reviewCount     Int      @default(238)
+  trustScore      Int      @default(94)
+  aiSummary       String   @default("Customers often mention delivery, product quality and customer support.")
+  ratingBreakdown String   @default("{\"5\":172,\"4\":44,\"3\":14,\"2\":5,\"1\":3}")
+  profileUrl      String   @default("https://www.furniturebrandreviews.com/review/weilai-concept")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
+}
+
+model BrandReview {
+  id               String   @id @default(cuid())
+  shopDomain       String
+  reviewerName     String
+  rating           Int
+  title            String
+  content          String
+  verifiedPurchase Boolean  @default(false)
+  reviewDate       DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
+
+  @@index([shopDomain])
+}
+
+model ProductReview {
+  id               String              @id @default(cuid())
+  shopDomain       String
+  productId        String
+  productHandle    String?
+  productTitle     String?
+  customerName     String
+  customerEmail    String?
+  rating           Int
+  title            String
+  content          String
+  imageUrl         String?
+  usefulCount      Int                 @default(0)
+  source           String              @default("STOREFRONT")
+  merchantReply    String?
+  repliedAt        DateTime?
+  verifiedPurchase Boolean             @default(false)
+  status           String              @default("PENDING")
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
+
+  @@index([shopDomain, productId])
+  @@index([shopDomain, status])
+}
+
+model ProductQuestion {
+  id            String    @id @default(cuid())
+  shopDomain    String
+  productId     String
+  productHandle String?
+  productTitle  String?
+  customerName  String
+  customerEmail String?
+  question      String
+  answer        String?
+  status        String    @default("PENDING")
+  createdAt     DateTime  @default(now())
+  answeredAt    DateTime?
+  updatedAt     DateTime  @updatedAt
+
+  shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
+
+  @@index([shopDomain, productId])
+  @@index([shopDomain, status])
+}
+
+model ProductReviewSettings {
+  id                       String   @id @default(cuid())
+  shopDomain               String   @unique
+  productReviewsEnabled    Boolean  @default(true)
+  productReviewWidgetEnabled Boolean @default(true)
+  autoApproveReviews       Boolean  @default(false)
+  requireEmail             Boolean  @default(true)
+  showVerifiedBadge        Boolean  @default(true)
+  allowPhotoReviews        Boolean  @default(false)
+  emailNotificationEnabled Boolean  @default(false)
+  starColor                String   @default("#f5a623")
+  starBackgroundColor      String   @default("#00b67a")
+  starBorderColor          String   @default("#00b67a")
+  starBorderRadius         Int      @default(2)
+  starSize                 Int      @default(22)
+  starGap                  Int      @default(2)
+  ratingBarColor           String   @default("#f5a623")
+  ratingBarBackgroundColor String   @default("#eef0f2")
+  ratingBadgeBackgroundColor String @default("#fff7e6")
+  ratingBadgeBorderColor   String   @default("#f1c36d")
+  ratingBadgeBorderRadius  Int      @default(999)
+  ratingBadgePadding       Int      @default(8)
+  avatarBackgroundColor    String   @default("#eef4ff")
+  avatarTextColor          String   @default("#24438f")
+  avatarSize               Int      @default(28)
+  buttonBackgroundColor    String   @default("#1f6f64")
+  buttonTextColor          String   @default("#ffffff")
+  textColor                String   @default("#202223")
+  lighterTextColor         String   @default("#6d7175")
+  titleTextColor           String   @default("#202223")
+  contentTextColor         String   @default("#202223")
+  titleFontSize            Int      @default(16)
+  contentFontSize          Int      @default(15)
+  hideReviewDate           Boolean  @default(false)
+  borderColor              String   @default("#dfe3e8")
+  cardBackgroundColor      String   @default("#ffffff")
+  borderRadius             Int      @default(8)
+  widgetBackgroundColor    String   @default("#ffffff")
+  widgetBorderRadius       Int      @default(8)
+  widgetBorderWidth        Int      @default(0)
+  reviewCardSpacing        Int      @default(16)
+  widgetMaxWidth           Int      @default(960)
+  showAverageRating        Boolean  @default(true)
+  showReviewCount          Boolean  @default(true)
+  showRatingBreakdown      Boolean  @default(true)
+  showWriteReviewButton    Boolean  @default(true)
+  showAskQuestionButton    Boolean  @default(false)
+  showAiSummary            Boolean  @default(true)
+  showReviewHighlights     Boolean  @default(true)
+  showPhotoSummary         Boolean  @default(true)
+  photoSummaryLimit        Int      @default(8)
+  showReviewerPhotos       Boolean  @default(false)
+  layoutType               String   @default("standard")
+  carouselCardsPerRow      Int      @default(3)
+  carouselAutoSlide        Boolean  @default(false)
+  carouselAutoplaySpeed    Int      @default(4)
+  carouselShowArrows       Boolean  @default(true)
+  carouselShowDots         Boolean  @default(true)
+  reviewsPerPage           Int      @default(5)
+  reviewsPerRow            Int      @default(3)
+  sortDefault              String   @default("newest")
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
+}
+
+model GoogleSeoSettings {
+  id                       String   @id @default(cuid())
+  shopDomain               String   @unique
+  seoRichSnippetsEnabled   Boolean  @default(false)
+  googleShoppingEnabled    Boolean  @default(false)
+  reviewsSiteEnabled       Boolean  @default(true)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
+}
+
+model SubscriptionSettings {
+  id         String   @id @default(cuid())
+  shopDomain String   @unique
+  plan       String   @default("FREE")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
+}
