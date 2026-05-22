@@ -1,5 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import prisma from "~/db.server";
+import { sendQuestionNotification } from "~/models/notifications.server";
 import {
   corsJson,
   createProductQuestion,
@@ -39,6 +40,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     question: requiredString(payload.question, "question"),
     status: settings?.autoApproveReviews ? "PUBLISHED" : "PENDING"
   });
+  void sendQuestionNotification(shopDomain, question);
 
   return corsJson({
     ok: true,

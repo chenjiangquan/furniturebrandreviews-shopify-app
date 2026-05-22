@@ -1,5 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import prisma from "~/db.server";
+import { sendReviewNotification } from "~/models/notifications.server";
 import {
   clampRating,
   corsJson,
@@ -52,6 +53,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     status: settings?.autoApproveReviews ? "PUBLISHED" : "PENDING",
     source: "STOREFRONT"
   });
+  void sendReviewNotification(shopDomain, review);
 
   return corsJson({
     ok: true,

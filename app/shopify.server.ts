@@ -6,6 +6,7 @@ import {
 } from "@shopify/shopify-app-remix/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+import { syncShopContactFromShopify } from "./models/notifications.server";
 
 const appUrl = process.env.SHOPIFY_CLI_TUNNEL_URL || process.env.SHOPIFY_APP_URL || "";
 
@@ -37,6 +38,7 @@ const shopify = shopifyApp({
       });
 
       await Promise.all([
+        session.accessToken ? syncShopContactFromShopify(session.shop, session.accessToken) : Promise.resolve(null),
         prisma.widgetSettings.upsert({
           where: { shopDomain: session.shop },
           update: {},
