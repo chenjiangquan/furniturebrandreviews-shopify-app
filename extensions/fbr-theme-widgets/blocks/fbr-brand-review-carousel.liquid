@@ -1,22 +1,70 @@
 {% assign brand_slug = block.settings.brand_slug | strip %}
+{% assign block_dom_id = 'fbr-brand-carousel-' | append: block.id %}
 
-{% if brand_slug != blank %}
-  {% if block.settings.title != blank %}
-    <h3>{{ block.settings.title | escape }}</h3>
-  {% endif %}
-  <div class="fbr-widget" data-brand="{{ brand_slug | escape }}" data-layout="carousel"></div>
-  <script async src="https://www.furniturebrandreviews.com/widget.js"></script>
-{% else %}
-  <div style="padding: 16px; border: 1px solid #dcdfe4; border-radius: 8px;">
-    Please connect your FurnitureBrandReviews business profile first.
-  </div>
+{% if block.settings.title != blank %}
+  <h3>{{ block.settings.title | escape }}</h3>
 {% endif %}
+
+<div
+  id="{{ block_dom_id }}"
+  class="fbr-brand-trust-loader"
+  data-fbr-brand-trust
+  data-brand="{{ brand_slug | escape }}"
+  data-layout="carousel"
+  data-shop="{{ shop.permanent_domain }}"
+  data-api-base="{{ block.settings.api_base_url }}"
+>
+  Loading FurnitureBrandReviews widget...
+</div>
+
+<script>
+  (function () {
+    var root = document.getElementById({{ block_dom_id | json }});
+    if (!root || root.dataset.fbrBrandReady === "true") return;
+    root.dataset.fbrBrandReady = "true";
+
+    function showFallback() {
+      root.innerHTML = "Please connect your FurnitureBrandReviews business profile first.";
+      root.style.padding = "16px";
+      root.style.border = "1px solid #dcdfe4";
+      root.style.borderRadius = "8px";
+    }
+
+    function loadExternalWidget(brandSlug) {
+      if (!brandSlug) {
+        showFallback();
+        return;
+      }
+      root.dataset.brand = brandSlug;
+      root.dataset.layout = "carousel";
+      root.className = "fbr-widget";
+      root.innerHTML = "";
+      var script = document.createElement("script");
+      script.async = true;
+      script.src = "https://www.furniturebrandreviews.com/widget.js";
+      document.head.appendChild(script);
+    }
+
+    if (root.dataset.brand) {
+      loadExternalWidget(root.dataset.brand);
+      return;
+    }
+
+    var apiBase = (root.dataset.apiBase || "/apps/fbr").replace(/\/$/, "");
+    var url = apiBase + "/api/brand-profile-settings?shop=" + encodeURIComponent(root.dataset.shop || "");
+    fetch(url, { credentials: "same-origin" })
+      .then(function (response) { return response.ok ? response.json() : null; })
+      .then(function (data) { loadExternalWidget(data && data.brandSlug); })
+      .catch(showFallback);
+  })();
+</script>
 
 {% schema %}
 {
   "name": "Brand Review Carousel",
   "target": "section",
   "settings": [
+    { "type": "text", "id": "api_base_url", "label": "App proxy base URL", "default": "/apps/fbr" },
     { "type": "text", "id": "brand_slug", "label": "Brand slug" },
     { "type": "text", "id": "title", "label": "Optional title" }
   ]

@@ -138,6 +138,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     update: { brandName, brandSlug, profileUrl },
     create: { shopDomain: session.shop, brandName, brandSlug, profileUrl }
   });
+  await prisma.brandWidgetData.upsert({
+    where: { shopDomain: session.shop },
+    update: { brandName, profileUrl },
+    create: { shopDomain: session.shop, brandName, profileUrl }
+  });
 
   return {
     ok: true,
@@ -398,13 +403,38 @@ async function detectInstalledThemeBlocks(shop: string, accessToken?: string | n
       const json = await response.json() as { asset?: { value?: string } };
       return json.asset?.value || "";
     }));
+    const normalizedThemeJson = assetContents.join("\n").toLowerCase();
     const appBlockTypes = assetContents.flatMap(extractThemeBlockTypes);
 
     return {
-      reviewWidget: hasAppBlock(appBlockTypes, "product-reviews-widget"),
-      starRating: hasAppBlock(appBlockTypes, "product-star-rating"),
-      brandCarousel: hasAppBlock(appBlockTypes, "fbr-brand-review-carousel"),
-      brandMicro: hasAppBlock(appBlockTypes, "fbr-brand-micro-trust-badge")
+      reviewWidget: hasAnyAppBlock(appBlockTypes, normalizedThemeJson, [
+        "product-reviews-widget",
+        "product_reviews_widget",
+        "review-widget",
+        "review_widget"
+      ]),
+      starRating: hasAnyAppBlock(appBlockTypes, normalizedThemeJson, [
+        "product-star-rating",
+        "product_star_rating",
+        "star-rating",
+        "star_rating"
+      ]),
+      brandCarousel: hasAnyAppBlock(appBlockTypes, normalizedThemeJson, [
+        "fbr-brand-review-carousel",
+        "fbr_brand_review_carousel",
+        "brand-review-carousel",
+        "brand_review_carousel",
+        "fbr-carousel",
+        "fbr_carousel"
+      ]),
+      brandMicro: hasAnyAppBlock(appBlockTypes, normalizedThemeJson, [
+        "fbr-brand-micro-trust-badge",
+        "fbr_brand_micro_trust_badge",
+        "brand-micro-trust-badge",
+        "brand_micro_trust_badge",
+        "fbr-micro-badge",
+        "fbr_micro_badge"
+      ])
     };
   } catch (error) {
     console.warn("Unable to detect installed theme app blocks", error);
@@ -437,7 +467,13 @@ function extractThemeBlockTypes(value: string) {
   }
 }
 
-function hasAppBlock(types: string[], blockHandle: string) {
-  const needle = `/blocks/${blockHandle}/`;
-  return types.some((type) => type.includes(needle));
+function hasAnyAppBlock(types: string[], normalizedThemeJson: string, blockHandles: string[]) {
+  return blockHandles.some((blockHandle) => {
+    const normalizedHandle = blockHandle.toLowerCase();
+    const appBlockNeedle = `/blocks/${normalizedHandle}/`;
+    return (
+      types.some((type) => type.includes(appBlockNeedle) || type.includes(normalizedHandle)) ||
+      normalizedThemeJson.includes(normalizedHandle)
+    );
+  });
 }
