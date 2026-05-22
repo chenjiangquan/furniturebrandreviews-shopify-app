@@ -8,6 +8,7 @@ import {
   Button,
   ButtonGroup,
   Card,
+  Checkbox,
   InlineGrid,
   InlineStack,
   Modal,
@@ -16,6 +17,7 @@ import {
   TextField
 } from "@shopify/polaris";
 import prisma from "~/db.server";
+import { sendTestNotificationEmail, syncShopContactFromShopify } from "~/models/notifications.server";
 import { getProductReviewWidgetSettings } from "~/models/reviews.server";
 import { authenticate } from "~/shopify.server";
 
@@ -80,18 +82,36 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     seoRichSnippetsEnabled: false,
     googleShoppingEnabled: false
   };
+  let shop = {
+    notificationEmail: "",
+    storeEmail: "",
+    contactEmail: "",
+    reviewEmailNotificationsEnabled: true,
+    questionEmailNotificationsEnabled: true
+  };
   let installedBlocks = emptyInstalledBlocks;
 
   try {
-    const [, loadedWidgetSettings, loadedGoogleSeoSettings, loadedInstalledBlocks] = await Promise.all([
+    if (session.accessToken) {
+      await syncShopContactFromShopify(shopDomain, session.accessToken);
+    }
+    const [, loadedWidgetSettings, loadedGoogleSeoSettings, loadedInstalledBlocks, loadedShop] = await Promise.all([
       getProductReviewWidgetSettings(shopDomain),
       prisma.widgetSettings.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } }),
       prisma.googleSeoSettings.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } }),
-      detectInstalledThemeBlocks(session.shop, session.accessToken)
+      detectInstalledThemeBlocks(session.shop, session.accessToken),
+      prisma.shop.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } })
     ]);
     widgetSettings = loadedWidgetSettings;
     googleSeoSettings = loadedGoogleSeoSettings;
     installedBlocks = loadedInstalledBlocks;
+    shop = {
+      notificationEmail: loadedShop.notificationEmail || "",
+      storeEmail: loadedShop.storeEmail || "",
+      contactEmail: loadedShop.contactEmail || "",
+      reviewEmailNotificationsEnabled: loadedShop.reviewEmailNotificationsEnabled,
+      questionEmailNotificationsEnabled: loadedShop.questionEmailNotificationsEnabled
+    };
   } catch (error) {
     console.error("Widgets Settings loader failed; rendering fallback UI", error);
   }
@@ -113,6 +133,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       brandSlug,
       brandProfileUrl
     },
+    notificationSettings: {
+      notificationEmail: shop.notificationEmail || shop.storeEmail || shop.contactEmail || "",
+      reviewEmailNotificationsEnabled: shop.reviewEmailNotificationsEnabled,
+      questionEmailNotificationsEnabled: shop.questionEmailNotificationsEnabled
+    },
     brandProfileExists: true
   };
 };
@@ -122,13 +147,51 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const form = await request.formData();
   const intent = String(form.get("intent") || "");
 
+  if (intent === "saveNotificationSettings" || intent === "sendTestEmail") {
+    const notificationEmail = String(form.get("notificationEmail") || "").trim();
+    const reviewEmailNotificationsEnabled = form.get("reviewEmailNotificationsEnabled") === "on";
+    const questionEmailNotificationsEnabled = form.get("questionEmailNotificationsEnabled") === "on";
+
+    await prisma.shop.upsert({
+      where: { shopDomain: session.shop },
+      update: {
+        notificationEmail,
+        reviewEmailNotificationsEnabled,
+        questionEmailNotificationsEnabled
+      },
+      create: {
+        shopDomain: session.shop,
+        notificationEmail,
+        reviewEmailNotificationsEnabled,
+        questionEmailNotificationsEnabled
+      }
+    });
+
+    if (intent === "sendTestEmail") {
+      try {
+        await sendTestNotificationEmail(session.shop);
+        return { ok: true, error: "", message: "Test email sent.", brandProfile: null };
+      } catch (error) {
+        console.error("Failed to send test notification email", error);
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : "Test email failed.",
+          message: "",
+          brandProfile: null
+        };
+      }
+    }
+
+    return { ok: true, error: "", message: "Notification settings saved.", brandProfile: null };
+  }
+
   if (intent !== "saveBrandProfile") {
-    return { ok: false, error: "Unsupported action.", brandProfile: null };
+    return { ok: false, error: "Unsupported action.", message: "", brandProfile: null };
   }
 
   const brandName = String(form.get("brandName") || "").trim();
   if (!brandName) {
-    return { ok: false, error: "Enter your brand name before installing this widget.", brandProfile: null };
+    return { ok: false, error: "Enter your brand name before installing this widget.", message: "", brandProfile: null };
   }
 
   const brandSlug = slugifyBrandName(brandName);
@@ -147,6 +210,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return {
     ok: true,
     error: "",
+    message: "Brand name saved.",
     brandProfile: {
       brandName: settings.brandName,
       brandSlug: settings.brandSlug,
@@ -156,10 +220,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function WidgetsSettings() {
-  const { googleSeoInstalled, themeEditorUrl, brandProfile, brandProfileExists } = useLoaderData<typeof loader>();
+  const { googleSeoInstalled, themeEditorUrl, brandProfile, notificationSettings, brandProfileExists } = useLoaderData<typeof loader>();
   const brandFetcher = useFetcher<typeof action>();
+  const notificationFetcher = useFetcher<typeof action>();
   const [manualWidget, setManualWidget] = React.useState<BrandTrustWidget | null>(null);
   const [brandName, setBrandName] = React.useState(brandProfile.brandName);
+  const [notificationEmail, setNotificationEmail] = React.useState(notificationSettings.notificationEmail);
+  const [reviewEmailNotificationsEnabled, setReviewEmailNotificationsEnabled] = React.useState(notificationSettings.reviewEmailNotificationsEnabled);
+  const [questionEmailNotificationsEnabled, setQuestionEmailNotificationsEnabled] = React.useState(notificationSettings.questionEmailNotificationsEnabled);
   const savedBrandProfile = brandFetcher.data?.ok && brandFetcher.data.brandProfile
     ? brandFetcher.data.brandProfile
     : brandProfile;
@@ -187,13 +255,13 @@ export default function WidgetsSettings() {
 
         <WidgetSection title="Brand Trust Widgets">
           <Card>
-            <brandFetcher.Form method="post">
-              <input type="hidden" name="intent" value="saveBrandProfile" />
-              <BlockStack gap="300">
-                <Text as="h3" variant="headingMd">FurnitureBrandReviews business profile</Text>
-                <Text as="p" tone="subdued">
-                  Make sure your business has a profile on FurnitureBrandReviews.com before installing this widget, otherwise the widget may not display any reviews.
-                </Text>
+            <BlockStack gap="300">
+              <Text as="h3" variant="headingMd">FurnitureBrandReviews business profile</Text>
+              <Text as="p" tone="subdued">
+                Make sure your business has a profile on FurnitureBrandReviews.com before installing this widget, otherwise the widget may not display any reviews.
+              </Text>
+              <brandFetcher.Form method="post">
+                <input type="hidden" name="intent" value="saveBrandProfile" />
                 <InlineStack gap="300" blockAlign="end">
                   <div style={{ flex: 1, minWidth: 260 }}>
                     <TextField
@@ -207,11 +275,59 @@ export default function WidgetsSettings() {
                   </div>
                   <Button submit variant="primary" loading={brandFetcher.state !== "idle"}>Save brand name</Button>
                 </InlineStack>
-                {brandSlug ? <Text as="p" tone="subdued">Brand slug: {brandSlug}</Text> : null}
-                {brandFetcher.data?.ok ? <Badge tone="success">Brand name saved</Badge> : null}
-                {brandFetcher.data && !brandFetcher.data.ok ? <Text as="p" tone="critical">{brandFetcher.data.error}</Text> : null}
-              </BlockStack>
-            </brandFetcher.Form>
+              </brandFetcher.Form>
+              <notificationFetcher.Form method="post">
+                <BlockStack gap="300">
+                  <input type="hidden" name="intent" value="saveNotificationSettings" />
+                  <TextField
+                    label="Notification email"
+                    name="notificationEmail"
+                    type="email"
+                    value={notificationEmail}
+                    onChange={setNotificationEmail}
+                    autoComplete="email"
+                    placeholder="merchant@example.com"
+                    helpText="Receive email notifications when customers submit a new review or question."
+                  />
+                  <Checkbox
+                    label="Email me when a new review is submitted"
+                    name="reviewEmailNotificationsEnabled"
+                    checked={reviewEmailNotificationsEnabled}
+                    onChange={setReviewEmailNotificationsEnabled}
+                  />
+                  <Checkbox
+                    label="Email me when a new question is submitted"
+                    name="questionEmailNotificationsEnabled"
+                    checked={questionEmailNotificationsEnabled}
+                    onChange={setQuestionEmailNotificationsEnabled}
+                  />
+                  <InlineStack gap="300">
+                    <Button submit loading={notificationFetcher.state !== "idle"}>Save notification settings</Button>
+                    <Button
+                      loading={notificationFetcher.state !== "idle"}
+                      onClick={() => {
+                        notificationFetcher.submit(
+                          {
+                            intent: "sendTestEmail",
+                            notificationEmail,
+                            reviewEmailNotificationsEnabled: reviewEmailNotificationsEnabled ? "on" : "",
+                            questionEmailNotificationsEnabled: questionEmailNotificationsEnabled ? "on" : ""
+                          },
+                          { method: "post" }
+                        );
+                      }}
+                    >
+                      Send test email
+                    </Button>
+                  </InlineStack>
+                  {notificationFetcher.data?.message ? <Badge tone="success">{notificationFetcher.data.message}</Badge> : null}
+                  {notificationFetcher.data?.error ? <Text as="p" tone="critical">{notificationFetcher.data.error}</Text> : null}
+                </BlockStack>
+              </notificationFetcher.Form>
+              {brandSlug ? <Text as="p" tone="subdued">Brand slug: {brandSlug}</Text> : null}
+              {brandFetcher.data?.ok ? <Badge tone="success">Brand name saved</Badge> : null}
+              {brandFetcher.data && !brandFetcher.data.ok ? <Text as="p" tone="critical">{brandFetcher.data.error}</Text> : null}
+            </BlockStack>
           </Card>
           {brandTrustWidgets.map((widget) => {
             const canInstall = Boolean(brandSlug);
