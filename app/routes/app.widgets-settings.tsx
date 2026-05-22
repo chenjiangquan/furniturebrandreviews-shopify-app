@@ -156,7 +156,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function WidgetsSettings() {
-  const { installedBlocks, googleSeoInstalled, themeEditorUrl, brandProfile, brandProfileExists } = useLoaderData<typeof loader>();
+  const { googleSeoInstalled, themeEditorUrl, brandProfile, brandProfileExists } = useLoaderData<typeof loader>();
   const brandFetcher = useFetcher<typeof action>();
   const [manualWidget, setManualWidget] = React.useState<BrandTrustWidget | null>(null);
   const [brandName, setBrandName] = React.useState(brandProfile.brandName);
@@ -174,15 +174,10 @@ export default function WidgetsSettings() {
       <BlockStack gap="500">
         <WidgetSection title="Product Review Widgets">
           {productReviewWidgets.map((widget) => {
-            const installed = installedBlocks[widget.key as keyof typeof installedBlocks];
-            const status = installed ? "Installed" : "Not installed";
-            const tone = installed ? "success" : "attention";
-
             return (
               <WidgetCard key={widget.title} title={widget.title} description={widget.description} image={widget.image}>
-                <Badge tone={tone}>{status}</Badge>
                 <ButtonGroup>
-                  <Button url={themeEditorUrl} target="_blank">{installed ? "Uninstall" : "Install"}</Button>
+                  <Button url={themeEditorUrl} target="_blank">Install</Button>
                   <Button url={widget.customizeUrl} variant="primary">Customize</Button>
                 </ButtonGroup>
               </WidgetCard>
@@ -219,14 +214,12 @@ export default function WidgetsSettings() {
             </brandFetcher.Form>
           </Card>
           {brandTrustWidgets.map((widget) => {
-            const installed = installedBlocks[widget.key];
             const canInstall = Boolean(brandSlug);
             return (
             <WidgetCard key={widget.title} title={widget.title} description={widget.description} image={widget.image}>
-              <Badge tone={installed ? "success" : canInstall ? "attention" : "warning"}>{installed ? "Installed" : canInstall ? "Ready to install" : "Brand name required"}</Badge>
               {!canInstall ? <Text as="p" tone="critical">Enter your brand name before installing this widget.</Text> : null}
               <ButtonGroup>
-                <Button url={themeEditorUrl} target="_blank" disabled={!canInstall}>{installed ? "Uninstall" : "Install"}</Button>
+                <Button url={themeEditorUrl} target="_blank" disabled={!canInstall}>Install</Button>
                 <Button onClick={() => setManualWidget(widget)} disabled={!canInstall}>Manual install</Button>
               </ButtonGroup>
             </WidgetCard>
