@@ -21,9 +21,9 @@ No production configuration should use `localhost` or a temporary Cloudflare tun
 Configured in `shopify.app.toml`:
 
 - `app/uninstalled` -> `/webhooks/app/uninstalled`
-- `customers/data_request` -> `/webhooks/customers/data_request`
-- `customers/redact` -> `/webhooks/customers/redact`
-- `shop/redact` -> `/webhooks/shop/redact`
+- `customers/data_request` -> `/webhooks/compliance`
+- `customers/redact` -> `/webhooks/compliance`
+- `shop/redact` -> `/webhooks/compliance`
 
 All webhook routes call `authenticate.webhook(request)`, which verifies the Shopify webhook signature before any data changes are made.
 
