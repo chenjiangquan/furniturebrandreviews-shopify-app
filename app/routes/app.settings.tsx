@@ -92,15 +92,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "sendTestEmail") {
     try {
-      await sendTestNotificationEmail(shopDomain);
-      return { ok: true, message: "Test email sent.", error: "" };
+      const result = await sendTestNotificationEmail(shopDomain);
+      return { ok: true, id: result.id, message: "Test email sent.", error: "" };
     } catch (error) {
       console.error("Failed to send test notification email", error);
-      return { ok: false, message: "", error: error instanceof Error ? error.message : "Test email failed." };
+      return { ok: false, id: "", message: "", error: error instanceof Error ? error.message : "Test email failed." };
     }
   }
 
-  return { ok: true, message: "Settings saved.", error: "" };
+  return { ok: true, id: "", message: "Settings saved.", error: "" };
 };
 
 export default function Settings() {

@@ -1,4 +1,5 @@
 import type { ProductQuestion, ProductReview, Shop } from "@prisma/client";
+import { Resend } from "resend";
 import prisma from "~/db.server";
 
 type ShopifyShopPayload = {
@@ -131,7 +132,8 @@ export async function sendTestNotificationEmail(shopDomain: string) {
   const to = notificationRecipient(shop);
   if (!to) throw new Error("Notification email address is missing.");
 
-  await sendEmail({
+  console.log("[email] sending test email to", to);
+  const result = await sendEmail({
     to,
     subject: "Furniture Brand Reviews test notification",
     html: notificationLayout(`
@@ -143,6 +145,7 @@ export async function sendTestNotificationEmail(shopDomain: string) {
       ])}
     `)
   });
+  return result;
 }
 
 async function getShopForNotification(shopDomain: string) {
@@ -161,31 +164,49 @@ function firstEmail(...values: Array<string | null | undefined>) {
   return values.map((value) => String(value || "").trim()).find((value) => value.includes("@")) || "";
 }
 
+type ResendSendResult = {
+  id?: string;
+  error?: unknown;
+  [key: string]: unknown;
+};
+
 async function sendEmail(input: { to: string; subject: string; html: string }) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.NOTIFICATION_FROM_EMAIL;
+  const apiKey = String(process.env.RESEND_API_KEY || "").trim();
+  const from = String(process.env.NOTIFICATION_FROM_EMAIL || "").trim();
   if (!apiKey || !from) {
-    console.error("Resend email is not configured. Set RESEND_API_KEY and NOTIFICATION_FROM_EMAIL.");
-    return;
+    const missing = [
+      !apiKey ? "RESEND_API_KEY" : "",
+      !from ? "NOTIFICATION_FROM_EMAIL" : ""
+    ].filter(Boolean).join(", ");
+    const error = new Error(`Resend email is not configured. Missing: ${missing}.`);
+    console.error("[email] resend error", error.message);
+    throw error;
   }
 
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
+  console.log("[email] from", from);
+  const resend = new Resend(apiKey);
+  const result = await resend.emails.send({
       from,
       to: input.to,
       subject: input.subject,
       html: input.html
-    })
   });
+  console.log("[email] resend result", sanitizeResendLog(result));
 
-  if (!response.ok) {
-    throw new Error(`Resend failed with ${response.status}: ${await response.text()}`);
+  if (result.error) {
+    const error = new Error(`Resend failed: ${resendErrorMessage(result)}`);
+    console.error("[email] resend error", error.message);
+    throw error;
   }
+
+  const id = result.data?.id;
+  if (!id) {
+    const error = new Error(`Resend did not return an email id: ${resendErrorMessage(result)}`);
+    console.error("[email] resend error", error.message);
+    throw error;
+  }
+
+  return { id };
 }
 
 function adminProductReviewsUrl(shopDomain: string) {
@@ -223,4 +244,21 @@ function escapeHtml(value: string) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function resendErrorMessage(result: ResendSendResult) {
+  if (!result) return "Unknown Resend error.";
+  if (typeof result.error === "string") return result.error;
+  if (result.error && typeof result.error === "object") {
+    const error = result.error as Record<string, unknown>;
+    return String(error.message || error.name || JSON.stringify(error));
+  }
+  return JSON.stringify(result);
+}
+
+function sanitizeResendLog(result: ResendSendResult) {
+  return {
+    id: (result.data as { id?: string } | undefined)?.id || result.id,
+    error: result.error
+  };
 }

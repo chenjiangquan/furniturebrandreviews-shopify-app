@@ -169,12 +169,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (intent === "sendTestEmail") {
       try {
-        await sendTestNotificationEmail(session.shop);
-        return { ok: true, error: "", message: "Test email sent.", brandProfile: null };
+        const result = await sendTestNotificationEmail(session.shop);
+        return { ok: true, id: result.id, error: "", message: "Test email sent.", brandProfile: null };
       } catch (error) {
         console.error("Failed to send test notification email", error);
         return {
           ok: false,
+          id: "",
           error: error instanceof Error ? error.message : "Test email failed.",
           message: "",
           brandProfile: null
@@ -182,16 +183,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    return { ok: true, error: "", message: "Notification settings saved.", brandProfile: null };
+    return { ok: true, id: "", error: "", message: "Notification settings saved.", brandProfile: null };
   }
 
   if (intent !== "saveBrandProfile") {
-    return { ok: false, error: "Unsupported action.", message: "", brandProfile: null };
+    return { ok: false, id: "", error: "Unsupported action.", message: "", brandProfile: null };
   }
 
   const brandName = String(form.get("brandName") || "").trim();
   if (!brandName) {
-    return { ok: false, error: "Enter your brand name before installing this widget.", message: "", brandProfile: null };
+    return { ok: false, id: "", error: "Enter your brand name before installing this widget.", message: "", brandProfile: null };
   }
 
   const brandSlug = slugifyBrandName(brandName);
@@ -209,6 +210,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   return {
     ok: true,
+    id: "",
     error: "",
     message: "Brand name saved.",
     brandProfile: {
