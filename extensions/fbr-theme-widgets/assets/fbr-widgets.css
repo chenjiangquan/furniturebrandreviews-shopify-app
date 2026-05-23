@@ -519,6 +519,26 @@
   width: 100%;
 }
 
+.fbr-form-message-success {
+  background: #e8f8ef;
+  border: 1px solid #a8e7bf;
+  border-radius: 8px;
+  color: #0f5132 !important;
+  font-weight: 650;
+  margin: 10px 0 0;
+  padding: 10px 12px;
+}
+
+.fbr-form-message-error {
+  background: #fff1f0;
+  border: 1px solid #ffccc7;
+  border-radius: 8px;
+  color: #a8071a !important;
+  font-weight: 650;
+  margin: 10px 0 0;
+  padding: 10px 12px;
+}
+
 .fbr-verified {
   border-radius: 999px;
   background: #e8f5f1;

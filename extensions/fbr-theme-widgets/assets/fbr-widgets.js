@@ -63,8 +63,17 @@
 
   async function fetchJson(url, options) {
     const response = await fetch(url, options);
-    if (!response.ok) throw new Error("Request failed");
-    return response.json();
+    const text = await response.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { error: text };
+    }
+    if (!response.ok || data.ok === false) {
+      throw new Error(data.error || data.message || "Request failed");
+    }
+    return data;
   }
 
   function settingsFromReviewData(data, fallbackSettings) {
@@ -449,7 +458,7 @@
         const button = form.querySelector("button[type='submit']");
         isSubmitting = true;
         if (button) button.disabled = true;
-        if (message) message.textContent = "";
+        setFormMessage(message, "", "");
 
         try {
           const result = await fetchJson(`${apiBase(el)}/api/product-questions`, {
@@ -458,11 +467,13 @@
             body: JSON.stringify(Object.fromEntries(new FormData(form)))
           });
           form.reset();
-          if (message) {
-            message.textContent = result.status === "PUBLISHED"
-              ? "Thanks. Your question has been published."
-              : "Thanks. Your question is waiting for approval.";
-          }
+          setFormMessage(
+            message,
+            result.status === "PUBLISHED"
+              ? "Thank you. Your question has been submitted and published."
+              : "Thank you. Your question has been submitted and is awaiting approval.",
+            "success"
+          );
           if (result.status === "PUBLISHED") {
             window.setTimeout(async () => {
               const data = await fetchJson(productReviewUrl(el));
@@ -470,7 +481,7 @@
             }, 900);
           }
         } catch (error) {
-          if (message) message.textContent = "Question could not be submitted. Please try again.";
+          setFormMessage(message, error.message || "Question could not be submitted. Please try again.", "error");
         } finally {
           isSubmitting = false;
           if (button) button.disabled = false;
@@ -774,7 +785,7 @@
       const button = form.querySelector("button[type='submit']");
       isSubmitting = true;
       if (button) button.disabled = true;
-      if (message) message.textContent = "";
+      setFormMessage(message, "", "");
 
       try {
         const result = await fetchJson(`${apiBase(widgetEl || form)}/api/product-reviews`, {
@@ -783,11 +794,13 @@
           body: JSON.stringify(Object.fromEntries(new FormData(form)))
         });
         form.reset();
-        if (message) {
-          message.textContent = result.status === "PUBLISHED"
-            ? "Thanks. Your review has been published."
-            : "Thanks. Your review is waiting for approval.";
-        }
+        setFormMessage(
+          message,
+          result.status === "PUBLISHED"
+            ? "Thank you. Your review has been submitted and published."
+            : "Thank you. Your review has been submitted and is awaiting approval.",
+          "success"
+        );
         isSubmitting = false;
         if (button) button.disabled = false;
         if (result.status === "PUBLISHED" && widgetEl) {
@@ -800,9 +813,17 @@
       } catch (error) {
         isSubmitting = false;
         if (button) button.disabled = false;
-        if (message) message.textContent = "Review could not be submitted. Please try again.";
+        setFormMessage(message, error.message || "Review could not be submitted. Please try again.", "error");
       }
     });
+  }
+
+  function setFormMessage(message, text, tone) {
+    if (!message) return;
+    message.textContent = text;
+    message.classList.remove("fbr-form-message-success", "fbr-form-message-error");
+    if (tone === "success") message.classList.add("fbr-form-message-success");
+    if (tone === "error") message.classList.add("fbr-form-message-error");
   }
 
   function renderBrandCarousel(el, data) {

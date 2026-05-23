@@ -77,21 +77,7 @@ export async function sendReviewNotification(shopDomain: string, review: Product
     await sendEmail({
       to,
       subject: "New product review received",
-      html: notificationLayout(`
-        <p>A customer submitted a new product review.</p>
-        ${detailsTable([
-          ["Store", shop.storeName || shop.shopDomain],
-          ["Shop domain", shop.shopDomain],
-          ["Product", review.productTitle || review.productHandle || review.productId],
-          ["Rating", `${review.rating} / 5`],
-          ["Review title", review.title],
-          ["Review content", review.content],
-          ["Customer name", review.customerName],
-          ["Customer email", review.customerEmail || "Not provided"],
-          ["Submitted date", review.createdAt.toISOString()]
-        ])}
-        <p><a href="${adminProductReviewsUrl(shop.shopDomain)}">Open Product Reviews</a></p>
-      `)
+      html: reviewEmailTemplate(shop, review)
     });
   } catch (error) {
     console.error("Failed to send review notification email", error);
@@ -107,20 +93,8 @@ export async function sendQuestionNotification(shopDomain: string, question: Pro
 
     await sendEmail({
       to,
-      subject: "New product question received",
-      html: notificationLayout(`
-        <p>A customer submitted a new product question.</p>
-        ${detailsTable([
-          ["Store", shop.storeName || shop.shopDomain],
-          ["Shop domain", shop.shopDomain],
-          ["Product", question.productTitle || question.productHandle || question.productId],
-          ["Question", question.question],
-          ["Customer name", question.customerName],
-          ["Customer email", question.customerEmail || "Not provided"],
-          ["Submitted date", question.createdAt.toISOString()]
-        ])}
-        <p><a href="${adminProductReviewsUrl(shop.shopDomain)}">Open Product Reviews</a></p>
-      `)
+      subject: "New customer question received",
+      html: questionEmailTemplate(shop, question)
     });
   } catch (error) {
     console.error("Failed to send question notification email", error);
@@ -136,14 +110,19 @@ export async function sendTestNotificationEmail(shopDomain: string) {
   const result = await sendEmail({
     to,
     subject: "Furniture Brand Reviews test notification",
-    html: notificationLayout(`
-      <p>This is a test email from Furniture Brand Reviews.</p>
-      ${detailsTable([
-        ["Store", shop.storeName || shop.shopDomain],
-        ["Shop domain", shop.shopDomain],
-        ["Notification email", to]
-      ])}
-    `)
+    html: baseEmailTemplate({
+      eyebrow: "Test notification",
+      heading: "Your email notifications are ready",
+      intro: "This is a test email from Furniture Brand Reviews.",
+      content: `
+        ${infoRows([
+          ["Store", shop.storeName || shop.shopDomain],
+          ["Shop domain", shop.shopDomain],
+          ["Notification email", to]
+        ])}
+      `,
+      shopDomain: shop.shopDomain
+    })
   });
   return result;
 }
@@ -214,28 +193,127 @@ function adminProductReviewsUrl(shopDomain: string) {
   return `https://admin.shopify.com/store/${shopHandle}/apps/furniture-brand-reviews/app/product-reviews`;
 }
 
-function notificationLayout(content: string) {
+function reviewEmailTemplate(shop: Shop, review: ProductReview) {
+  return baseEmailTemplate({
+    eyebrow: "New product review",
+    heading: "New product review received",
+    intro: "A customer submitted a new product review for your store.",
+    shopDomain: shop.shopDomain,
+    content: `
+      <div style="background:#f8faf9;border:1px solid #dde5e1;border-radius:14px;padding:18px;margin:18px 0;">
+        <div style="font-size:13px;line-height:20px;color:#667085;margin-bottom:6px;">Rating</div>
+        <div style="font-size:22px;line-height:28px;color:#f5a623;font-weight:700;letter-spacing:1px;">${ratingStars(review.rating)} <span style="font-size:14px;color:#344054;font-weight:600;">${review.rating}/5</span></div>
+        <h2 style="font-size:20px;line-height:28px;color:#101828;margin:14px 0 8px;">${escapeHtml(review.title)}</h2>
+        <p style="font-size:15px;line-height:24px;color:#344054;margin:0;">${escapeHtml(review.content)}</p>
+      </div>
+      ${infoRows([
+        ["Product", review.productTitle || review.productHandle || review.productId],
+        ["Customer", review.customerName],
+        ["Email", review.customerEmail || "Not provided"],
+        ["Date", formatEmailDate(review.createdAt)],
+        ["Store", shop.storeName || shop.shopDomain],
+        ["Shop domain", shop.shopDomain]
+      ])}
+    `
+  });
+}
+
+function questionEmailTemplate(shop: Shop, question: ProductQuestion) {
+  return baseEmailTemplate({
+    eyebrow: "New customer question",
+    heading: "New customer question received",
+    intro: "A customer submitted a new product question for your store.",
+    shopDomain: shop.shopDomain,
+    content: `
+      <div style="background:#f8faf9;border:1px solid #dde5e1;border-radius:14px;padding:18px;margin:18px 0;">
+        <div style="font-size:13px;line-height:20px;color:#667085;margin-bottom:6px;">Question</div>
+        <p style="font-size:16px;line-height:25px;color:#101828;margin:0;font-weight:600;">${escapeHtml(question.question)}</p>
+      </div>
+      ${infoRows([
+        ["Product", question.productTitle || question.productHandle || question.productId],
+        ["Customer", question.customerName],
+        ["Email", question.customerEmail || "Not provided"],
+        ["Date", formatEmailDate(question.createdAt)],
+        ["Store", shop.storeName || shop.shopDomain],
+        ["Shop domain", shop.shopDomain]
+      ])}
+    `
+  });
+}
+
+function baseEmailTemplate(input: {
+  eyebrow: string;
+  heading: string;
+  intro: string;
+  content: string;
+  shopDomain: string;
+}) {
+  const adminUrl = adminProductReviewsUrl(input.shopDomain);
   return `
-    <div style="font-family: Arial, sans-serif; color: #202223; line-height: 1.5;">
-      <h2 style="margin: 0 0 16px;">Furniture Brand Reviews</h2>
-      ${content}
+    <div style="margin:0;padding:0;background:#f3f5f6;">
+      <div style="display:none;max-height:0;overflow:hidden;color:#f3f5f6;">${escapeHtml(input.heading)}</div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#f3f5f6;border-collapse:collapse;margin:0;padding:0;">
+        <tr>
+          <td align="center" style="padding:28px 12px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:640px;border-collapse:collapse;">
+              <tr>
+                <td style="padding:0 0 14px;">
+                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:24px;font-weight:800;color:#1f2937;">
+                    Furniture <span style="color:#6b4eff;">Brand Reviews</span>
+                  </div>
+                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#667085;">Real reviews. Real furniture.</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="background:#ffffff;border:1px solid #e1e6ea;border-radius:18px;padding:28px;box-shadow:0 8px 24px rgba(16,24,40,0.06);font-family:Arial,Helvetica,sans-serif;">
+                  <div style="font-size:12px;line-height:18px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#1f6f64;margin-bottom:8px;">${escapeHtml(input.eyebrow)}</div>
+                  <h1 style="font-size:26px;line-height:34px;color:#101828;margin:0 0 10px;font-weight:800;">${escapeHtml(input.heading)}</h1>
+                  <p style="font-size:15px;line-height:24px;color:#475467;margin:0 0 18px;">${escapeHtml(input.intro)}</p>
+                  ${input.content}
+                  <div style="margin-top:24px;">
+                    <a href="${adminUrl}" style="display:inline-block;background:#1f6f64;color:#ffffff;text-decoration:none;font-size:15px;line-height:20px;font-weight:700;padding:12px 18px;border-radius:10px;">Open Product Reviews</a>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:18px 4px 0;text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:20px;color:#667085;">
+                  FurnitureBrandReviews.com · Manage notification settings in your Shopify app
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
     </div>
   `;
 }
 
-function detailsTable(rows: Array<[string, string]>) {
+function infoRows(rows: Array<[string, string]>) {
   return `
-    <table style="border-collapse: collapse; width: 100%; max-width: 680px;">
-      <tbody>
-        ${rows.map(([label, value]) => `
-          <tr>
-            <td style="border: 1px solid #dfe3e8; padding: 8px; font-weight: 700; width: 180px;">${escapeHtml(label)}</td>
-            <td style="border: 1px solid #dfe3e8; padding: 8px;">${escapeHtml(value)}</td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
+    <div style="border-top:1px solid #edf0f2;margin-top:18px;padding-top:6px;">
+      ${rows.map(([label, value]) => `
+        <div style="display:block;border-bottom:1px solid #edf0f2;padding:11px 0;">
+          <div style="font-size:12px;line-height:18px;color:#667085;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">${escapeHtml(label)}</div>
+          <div style="font-size:15px;line-height:23px;color:#101828;font-weight:600;word-break:break-word;">${escapeHtml(value)}</div>
+        </div>
+      `).join("")}
+    </div>
   `;
+}
+
+function ratingStars(rating: number) {
+  const full = Math.max(0, Math.min(5, Math.round(Number(rating) || 0)));
+  return `${"★".repeat(full)}${"☆".repeat(5 - full)}`;
+}
+
+function formatEmailDate(value: Date) {
+  return new Intl.DateTimeFormat("en", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(value);
 }
 
 function escapeHtml(value: string) {
