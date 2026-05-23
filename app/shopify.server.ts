@@ -28,12 +28,15 @@ const shopify = shopifyApp({
         where: { shopDomain: session.shop },
         update: {
           accessToken: session.accessToken,
-          scope: session.scope
+          scope: session.scope,
+          isActive: true,
+          uninstalledAt: null
         },
         create: {
           shopDomain: session.shop,
           accessToken: session.accessToken,
-          scope: session.scope
+          scope: session.scope,
+          isActive: true
         }
       });
 

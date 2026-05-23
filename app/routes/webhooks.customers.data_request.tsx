@@ -1,11 +1,11 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
-import { handleAppUninstalled } from "~/models/gdpr.server";
+import { handleCustomersDataRequest } from "~/models/gdpr.server";
 import { authenticate } from "~/shopify.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { shop } = await authenticate.webhook(request);
+  const { shop, payload } = await authenticate.webhook(request);
 
-  await handleAppUninstalled(shop);
+  await handleCustomersDataRequest(shop, payload);
 
   return new Response();
 };

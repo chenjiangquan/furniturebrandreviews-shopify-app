@@ -137,3 +137,9 @@ The storefront JavaScript defaults to the Shopify App Proxy base path `/apps/fbr
 - Customer-submitted reviews are not publicly displayed until approved.
 - AI is represented only as a configurable summary field.
 - Verified purchase is a stored boolean for MVP moderation workflows. Automatic verification can be added later with Shopify Order API checks using customer email and product ID. Add `read_orders` only when that verification is implemented.
+- Shopify app listing URLs:
+  - Privacy policy: https://www.furniturebrandreviews.com/privacy-policy
+  - Terms of service: https://www.furniturebrandreviews.com/terms-of-service
+  - Contact: https://www.furniturebrandreviews.com/contact
+- Public unlisted app review preparation is documented in `SUBMISSION_CHECKLIST.md`.
+- Production deployment notes are documented in `LAUNCH_NOTES.md`.
