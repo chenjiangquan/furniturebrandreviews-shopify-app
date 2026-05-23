@@ -451,7 +451,6 @@ function ReviewRow({ review, busy }: { review: any; busy: boolean }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "minmax(180px, 0.85fr) minmax(90px, 0.35fr) minmax(240px, 1.45fr) minmax(190px, 0.8fr)", gap: 16, padding: 16, borderBottom: "1px solid #ebebeb", alignItems: "start" }}>
       <InlineStack gap="300" wrap={false} blockAlign="start">
-        <Checkbox label="" checked={false} onChange={() => {}} />
         <BlockStack gap="150">
           <Text as="p" variant="headingSm">{review.customerName}</Text>
           <Text as="p" tone="subdued">{review.productTitle || review.productId}</Text>
