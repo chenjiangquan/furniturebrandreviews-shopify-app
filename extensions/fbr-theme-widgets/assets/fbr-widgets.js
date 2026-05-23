@@ -958,14 +958,24 @@
     watchLegacyFloatingBadges();
 
     document.querySelectorAll("[data-fbr-product-stars]").forEach(async (el) => {
-      const data = await fetchJson(productReviewUrl(el));
-      renderProductStars(el, data);
+      try {
+        const data = await fetchJson(productReviewUrl(el));
+        renderProductStars(el, data);
+      } catch (error) {
+        console.error("[fbr] Product Star Rating failed", error);
+        renderProductStars(el, { averageRating: 0, reviewCount: 0 });
+      }
     });
 
     document.querySelectorAll("[data-fbr-product-reviews]").forEach(async (el) => {
-      const data = await fetchJson(productReviewUrl(el));
-      const settings = data.widgetSettings || await fetchJson(`${apiBase(el)}/api/product-review-widget-settings?shop=${encodeURIComponent(shop(el))}&_=${Date.now()}`).catch(() => defaultProductSettings);
-      renderProductReviews(el, data, settingsFromReviewData(data, settings));
+      try {
+        const data = await fetchJson(productReviewUrl(el));
+        const settings = data.widgetSettings || await fetchJson(`${apiBase(el)}/api/product-review-widget-settings?shop=${encodeURIComponent(shop(el))}&_=${Date.now()}`).catch(() => defaultProductSettings);
+        renderProductReviews(el, data, settingsFromReviewData(data, settings));
+      } catch (error) {
+        console.error("[fbr] Product Reviews Widget failed", error);
+        renderProductReviews(el, { averageRating: 0, reviewCount: 0, reviews: [], questions: [] }, defaultProductSettings);
+      }
     });
 
     document.querySelectorAll("[data-fbr-review-form]").forEach(bindReviewForm);

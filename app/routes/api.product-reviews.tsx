@@ -13,9 +13,12 @@ import {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const shop = requiredString(url.searchParams.get("shop"), "shop");
-  const productId = requiredString(url.searchParams.get("productId"), "productId");
-  const productHandle = String(url.searchParams.get("productHandle") || "");
-  const productTitle = String(url.searchParams.get("productTitle") || "");
+  const productId = String(url.searchParams.get("productId") || "").trim();
+  const productHandle = String(url.searchParams.get("productHandle") || "").trim();
+  const productTitle = String(url.searchParams.get("productTitle") || "").trim();
+  if (!productId && !productHandle && !productTitle) {
+    throw new Response("productId, productHandle, or productTitle is required.", { status: 400 });
+  }
   const [summary, settings] = await Promise.all([
     getProductReviewSummary(shop, productId, productHandle, productTitle),
     getProductReviewWidgetSettings(shop)
