@@ -1,6 +1,6 @@
 name = "Furniture Brand Reviews"
 client_id = "db5beafee602d16825792984fa641886"
-application_url = "https://furniturebrandreviews-shopify-app-production.up.railway.app"
+application_url = "https://app.furniturebrandreviews.com"
 embedded = true
 
 [build]
@@ -12,9 +12,9 @@ scopes = "read_products,read_themes"
 
 [auth]
 redirect_urls = [
-  "https://furniturebrandreviews-shopify-app-production.up.railway.app/auth/callback",
-  "https://furniturebrandreviews-shopify-app-production.up.railway.app/auth/shopify/callback",
-  "https://furniturebrandreviews-shopify-app-production.up.railway.app/api/auth/callback"
+  "https://app.furniturebrandreviews.com/auth/callback",
+  "https://app.furniturebrandreviews.com/auth/shopify/callback",
+  "https://app.furniturebrandreviews.com/api/auth/callback"
 ]
 
 [webhooks]
@@ -29,6 +29,6 @@ api_version = "2025-10"
   uri = "/webhooks/compliance"
 
 [app_proxy]
-url = "https://furniturebrandreviews-shopify-app-production.up.railway.app"
+url = "https://app.furniturebrandreviews.com"
 subpath = "fbr"
 prefix = "apps"

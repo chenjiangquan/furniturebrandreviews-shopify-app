@@ -2,7 +2,7 @@
 
 ## Production App
 
-- Railway production URL: https://furniturebrandreviews-shopify-app-production.up.railway.app
+- Production custom domain: https://app.furniturebrandreviews.com
 - Shopify app distribution: Public App - Unlisted
 - Embedded app: enabled
 - App proxy: `/apps/fbr`
@@ -15,7 +15,7 @@ Backend:
 ```bash
 SHOPIFY_API_KEY=
 SHOPIFY_API_SECRET=
-SHOPIFY_APP_URL=https://furniturebrandreviews-shopify-app-production.up.railway.app
+SHOPIFY_APP_URL=https://app.furniturebrandreviews.com
 SCOPES=read_products,read_themes
 DATABASE_URL=
 ```
@@ -58,11 +58,11 @@ npm run setup
 
 Set these in Shopify Partner Dashboard / app configuration:
 
-- App URL: `https://furniturebrandreviews-shopify-app-production.up.railway.app`
-- Allowed redirection URL: `https://furniturebrandreviews-shopify-app-production.up.railway.app/auth/callback`
-- Allowed redirection URL: `https://furniturebrandreviews-shopify-app-production.up.railway.app/auth/shopify/callback`
-- Allowed redirection URL: `https://furniturebrandreviews-shopify-app-production.up.railway.app/api/auth/callback`
-- App proxy URL: `https://furniturebrandreviews-shopify-app-production.up.railway.app`
+- App URL: `https://app.furniturebrandreviews.com`
+- Allowed redirection URL: `https://app.furniturebrandreviews.com/auth/callback`
+- Allowed redirection URL: `https://app.furniturebrandreviews.com/auth/shopify/callback`
+- Allowed redirection URL: `https://app.furniturebrandreviews.com/api/auth/callback`
+- App proxy URL: `https://app.furniturebrandreviews.com`
 - App proxy prefix/subpath: `/apps/fbr`
 
 Listing URLs:

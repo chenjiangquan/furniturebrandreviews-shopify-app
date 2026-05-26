@@ -10,8 +10,8 @@ Furniture Brand Reviews is prepared for Shopify Public App - Unlisted review. Th
 
 ## Production URLs
 
-- Production app URL: https://furniturebrandreviews-shopify-app-production.up.railway.app
-- App proxy URL: https://furniturebrandreviews-shopify-app-production.up.railway.app
+- Production app URL: https://app.furniturebrandreviews.com
+- App proxy URL: https://app.furniturebrandreviews.com
 - App proxy path: `/apps/fbr`
 
 No production configuration should use `localhost` or a temporary Cloudflare tunnel URL.

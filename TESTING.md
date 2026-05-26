@@ -87,15 +87,15 @@ Do not add `read_orders` until verified-purchase checking is implemented with th
 When `npm run dev` gives you a tunnel URL such as:
 
 ```text
-https://abc123.trycloudflare.com
+https://your-current-shopify-cli-tunnel.example
 ```
 
 Use these redirect URLs:
 
 ```text
-https://abc123.trycloudflare.com/auth/callback
-https://abc123.trycloudflare.com/auth/shopify/callback
-https://abc123.trycloudflare.com/api/auth/callback
+https://your-current-shopify-cli-tunnel.example/auth/callback
+https://your-current-shopify-cli-tunnel.example/auth/shopify/callback
+https://your-current-shopify-cli-tunnel.example/api/auth/callback
 ```
 
 Shopify CLI should update these automatically in dev mode if the app is linked and `automatically_update_urls_on_dev` is enabled.
@@ -105,7 +105,7 @@ Shopify CLI should update these automatically in dev mode if the app is linked a
 Use the tunnel root:
 
 ```text
-https://abc123.trycloudflare.com
+https://your-current-shopify-cli-tunnel.example
 ```
 
 ### App Proxy
@@ -115,7 +115,7 @@ Use:
 ```text
 Prefix: apps
 Subpath: fbr
-Proxy URL: https://abc123.trycloudflare.com
+Proxy URL: https://your-current-shopify-cli-tunnel.example
 ```
 
 Storefront blocks call the app proxy through:
