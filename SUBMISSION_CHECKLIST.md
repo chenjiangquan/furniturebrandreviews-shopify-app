@@ -36,28 +36,46 @@ Expected behavior:
 
 ## Shopify Reviewer Test Steps
 
+Reviewer test account:
+
+- Username: `reviewtest@furniturebrandreviews.com`
+- Password: `88888888`
+
+This app is embedded in Shopify Admin and uses Shopify OAuth rather than a separate app login. Please install the app on a test store, then open Apps -> Furniture Brand Reviews. Demo data is created for the current shop by opening:
+
+```text
+/app/reviewer-demo
+```
+
+The demo setup is authenticated through Shopify Admin and is isolated by `shopDomain`.
+
 1. Install the app on a Shopify development store.
 2. Open Shopify Admin -> Apps -> Furniture Brand Reviews.
-3. Confirm the embedded Dashboard loads without redirect loops.
-4. Go to Widgets Settings.
-5. Enter and save a Brand name in the FurnitureBrandReviews business profile card.
-6. Open Online Store -> Customize -> Product template.
-7. Add an app block:
+3. Open `/app/reviewer-demo` once to create reviewer demo data for the current shop.
+4. Confirm the embedded Dashboard loads without redirect loops and shows product review counts.
+5. Go to Product Reviews and confirm demo reviews/questions are visible.
+6. Approve, reply, edit, or delete a review.
+7. Go to Widgets Settings.
+8. Confirm the demo brand name is `Furniture Demo Store` and notification email is `reviewtest@furniturebrandreviews.com`.
+9. Save brand name or notification email settings.
+10. Click Send test email if Resend is configured.
+11. Open Online Store -> Customize -> Product template.
+12. Add an app block:
    - Product Reviews Widget
    - Product Star Rating
    - Brand Review Carousel
    - Brand Micro Trust Badge
-8. Open a storefront product page and submit a test product review.
-9. Return to the embedded admin app -> Product Reviews.
-10. Approve or publish the review, then add a merchant reply.
-11. Refresh the storefront product page and confirm the approved review and merchant reply appear.
-12. Submit a test question from the Product Reviews Widget.
-13. Return to Product Reviews -> Questions, publish the question, and add an answer.
-14. Refresh the storefront product page and confirm the published Q&A appears in the Questions tab.
-15. In Widgets Settings, set the Notification email and click Send test email.
-16. Submit another review/question and confirm notification email delivery if Resend is configured.
-17. Uninstall the app from Shopify Admin settings.
-18. Confirm the app receives the uninstall webhook and marks the shop inactive.
+   - Collection Stars on a collection template
+13. Open a storefront product page and submit a test product review.
+14. Return to the embedded admin app -> Product Reviews.
+15. Approve or publish the review, then add a merchant reply.
+16. Refresh the storefront product page and confirm the approved review and merchant reply appear.
+17. Submit a test question from the Product Reviews Widget.
+18. Return to Product Reviews -> Questions, publish the question, and add an answer.
+19. Refresh the storefront product page and confirm the published Q&A appears in the Questions tab.
+20. Submit another review/question and confirm notification email delivery if Resend is configured.
+21. Uninstall the app from Shopify Admin settings.
+22. Confirm the app receives the uninstall webhook and marks the shop inactive.
 
 ## App Review Notes
 

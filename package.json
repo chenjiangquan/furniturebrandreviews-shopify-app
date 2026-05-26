@@ -13,7 +13,8 @@
     "setup": "prisma generate && prisma db push",
     "prisma": "prisma",
     "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seed:reviewer": "node scripts/seed-reviewer-demo.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

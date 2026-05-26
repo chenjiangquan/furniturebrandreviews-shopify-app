@@ -102,3 +102,13 @@ This creates and releases a new Shopify app version that includes the Theme App 
 ## Production Error Handling
 
 Production UI should show friendly messages to merchants. Detailed operational errors should be logged with `console.error` in Railway logs. Do not show development-only instructions such as local setup commands, local URLs, or temporary tunnel URLs in production app screens.
+
+## Reviewer Demo Data
+
+Shopify reviewers can initialize demo data for the currently authenticated shop by opening `/app/reviewer-demo` inside the embedded app. The route is protected by Shopify Admin OAuth and seeds data only for the current `shopDomain`.
+
+For internal local testing:
+
+```bash
+REVIEWER_DEMO_SHOP=your-store.myshopify.com npm run seed:reviewer
+```
