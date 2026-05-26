@@ -157,6 +157,42 @@
   color: #6d7175;
 }
 
+.fbr-collection-stars-config {
+  display: none !important;
+  margin: 0 !important;
+}
+
+.fbr-collection-star-rating {
+  align-items: center;
+  color: #202223;
+  display: flex;
+  flex-wrap: wrap;
+  font-family: inherit;
+  gap: 6px;
+  line-height: 1.2;
+  margin-top: 6px;
+  min-height: 18px;
+}
+
+.fbr-collection-star-rating:empty {
+  display: none;
+}
+
+.fbr-collection-star-icons {
+  align-items: center;
+  display: inline-flex;
+}
+
+.fbr-collection-star-score {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.fbr-collection-star-count {
+  color: #6d7175;
+  font-size: 12px;
+}
+
 .fbr-review-list {
   display: grid;
   gap: 18px;

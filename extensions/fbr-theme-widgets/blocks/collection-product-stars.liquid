@@ -1,0 +1,28 @@
+{{ 'fbr-widgets.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'fbr-widgets.js' | asset_url }}" defer></script>
+
+<div
+  class="fbr-widget fbr-collection-stars-config"
+  style="--fbr-star: {{ block.settings.star_color }};"
+  data-fbr-collection-stars
+  data-api-base="{{ block.settings.api_base_url }}"
+  data-shop="{{ shop.permanent_domain }}"
+  data-show-count="{{ block.settings.show_review_count }}"
+  data-hide-empty="{{ block.settings.hide_when_empty }}"
+></div>
+
+{% schema %}
+{
+  "name": "Collection Stars",
+  "target": "section",
+  "enabled_on": {
+    "templates": ["collection", "index", "search"]
+  },
+  "settings": [
+    { "type": "text", "id": "api_base_url", "label": "App proxy base URL", "default": "/apps/fbr" },
+    { "type": "color", "id": "star_color", "label": "Star color", "default": "#f5a623" },
+    { "type": "checkbox", "id": "show_review_count", "label": "Show review count", "default": true },
+    { "type": "checkbox", "id": "hide_when_empty", "label": "Hide products with no reviews", "default": false }
+  ]
+}
+{% endschema %}

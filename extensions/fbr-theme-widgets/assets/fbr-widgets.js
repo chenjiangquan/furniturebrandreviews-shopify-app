@@ -113,6 +113,112 @@
     `;
   }
 
+  function renderCollectionProductStars(el, data, options) {
+    const rating = Number(data.averageRating) || 0;
+    const reviewCount = Number(data.reviewCount) || 0;
+    if (options.hideEmpty && reviewCount === 0) {
+      el.innerHTML = "";
+      el.hidden = true;
+      return;
+    }
+
+    el.hidden = false;
+    el.innerHTML = `
+      <span class="fbr-collection-star-icons">${starSquares(rating, {
+        ...defaultProductSettings,
+        starColor: options.starColor,
+        starSize: options.starSize,
+        starGap: options.starGap
+      })}</span>
+      <span class="fbr-collection-star-score">${rating.toFixed(1)}</span>
+      ${options.showCount ? `<span class="fbr-collection-star-count">${reviewCount} ${reviewCount === 1 ? "review" : "reviews"}</span>` : ""}
+    `;
+  }
+
+  function initCollectionProductStars(configEl) {
+    const options = {
+      apiBase: apiBase(configEl),
+      shop: shop(configEl),
+      showCount: configEl.dataset.showCount !== "false",
+      hideEmpty: configEl.dataset.hideEmpty === "true",
+      starColor: window.getComputedStyle(configEl).getPropertyValue("--fbr-star").trim() || defaultProductSettings.starColor,
+      starSize: 15,
+      starGap: 1
+    };
+    if (!options.shop) return;
+
+    const productLinks = Array.from(document.querySelectorAll('a[href*="/products/"]'))
+      .filter((link) => !link.closest(".fbr-widget") && !link.closest(".fbr-collection-star-rating"));
+    const insertedByCard = new Set();
+
+    productLinks.forEach((link) => {
+      const handle = productHandleFromHref(link.getAttribute("href") || "");
+      if (!handle) return;
+
+      const titleTarget = productTitleTarget(link);
+      if (!titleTarget) return;
+
+      const card = productCardForLink(link);
+      const dedupeKey = card || titleTarget;
+      if (insertedByCard.has(dedupeKey)) return;
+      insertedByCard.add(dedupeKey);
+
+      const existing = card?.querySelector?.(`[data-fbr-collection-star-handle="${cssEscape(handle)}"]`);
+      if (existing) return;
+
+      const ratingEl = document.createElement("div");
+      ratingEl.className = "fbr-collection-star-rating";
+      ratingEl.dataset.fbrCollectionStarHandle = handle;
+      ratingEl.setAttribute("aria-label", "Product rating");
+      titleTarget.insertAdjacentElement("afterend", ratingEl);
+
+      fetchJson(`${options.apiBase}/api/product-reviews?shop=${encodeURIComponent(options.shop)}&productHandle=${encodeURIComponent(handle)}&productTitle=${encodeURIComponent(productTitleFromLink(link))}`)
+        .then((data) => renderCollectionProductStars(ratingEl, data, options))
+        .catch((error) => {
+          console.error("[fbr] Collection product stars failed", { handle, error });
+          renderCollectionProductStars(ratingEl, { averageRating: 0, reviewCount: 0 }, options);
+        });
+    });
+  }
+
+  function productHandleFromHref(href) {
+    try {
+      const url = new URL(href, window.location.origin);
+      const match = url.pathname.match(/\/products\/([^/?#]+)/);
+      return match ? decodeURIComponent(match[1]).replace(/\/$/, "") : "";
+    } catch {
+      const match = href.match(/\/products\/([^/?#]+)/);
+      return match ? decodeURIComponent(match[1]).replace(/\/$/, "") : "";
+    }
+  }
+
+  function productTitleTarget(link) {
+    if (link.querySelector("img, picture") && !cleanProductText(link)) return null;
+    const heading = link.closest("h1,h2,h3,h4,.card__heading,.product-card__title,.product-title");
+    if (heading && cleanProductText(heading)) return heading;
+    if (cleanProductText(link)) return link;
+    return null;
+  }
+
+  function productCardForLink(link) {
+    return link.closest(".card-wrapper,.product-card-wrapper,.card,.grid__item,li,[class*='product-card']");
+  }
+
+  function productTitleFromLink(link) {
+    return cleanProductText(link.closest("h1,h2,h3,h4,.card__heading,.product-card__title,.product-title") || link);
+  }
+
+  function cleanProductText(el) {
+    return String(el?.textContent || "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function cssEscape(value) {
+    if (window.CSS && typeof window.CSS.escape === "function") return window.CSS.escape(value);
+    return String(value).replace(/["\\]/g, "\\$&");
+  }
+
   function renderProductReviews(el, data, settings = defaultProductSettings) {
     if (!settings.productReviewsEnabled || !settings.productReviewWidgetEnabled) {
       el.innerHTML = "";
@@ -977,6 +1083,8 @@
         renderProductReviews(el, { averageRating: 0, reviewCount: 0, reviews: [], questions: [] }, defaultProductSettings);
       }
     });
+
+    document.querySelectorAll("[data-fbr-collection-stars]").forEach(initCollectionProductStars);
 
     document.querySelectorAll("[data-fbr-review-form]").forEach(bindReviewForm);
 
