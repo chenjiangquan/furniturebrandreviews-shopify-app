@@ -15,15 +15,17 @@ import {
   Text
 } from "@shopify/polaris";
 import prisma from "~/db.server";
+import { PRO_PLAN, PRO_PLAN_PRICE } from "~/models/billing-plans";
 import { normalizeLegacyReviewStatuses } from "~/models/reviews.server";
-import { authenticate } from "~/shopify.server";
+import { authenticate, isBillingTestMode } from "~/shopify.server";
 
 type DashboardData = {
   totalReviews: number;
   pendingReviews: number;
   approvedReviews: number;
   brandWidgetStatus: string;
-  plan: "FREE" | "ADVANCED";
+  plan: "FREE" | "PRO";
+  subscriptionId: string;
 };
 
 const fallbackData: DashboardData = {
@@ -31,27 +33,31 @@ const fallbackData: DashboardData = {
   pendingReviews: 0,
   approvedReviews: 0,
   brandWidgetStatus: "Active",
-  plan: "FREE"
+  plan: "FREE",
+  subscriptionId: ""
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<DashboardData> => {
   try {
-    const { session } = await authenticate.admin(request);
+    const { billing, session } = await authenticate.admin(request);
     const shopDomain = session.shop;
     await normalizeLegacyReviewStatuses(shopDomain);
     const { totalReviews, pendingReviews, approvedReviews } = await getDashboardReviewStats(shopDomain);
-    const subscription = await prisma.subscriptionSettings.upsert({
+    const billingStatus = await getBillingStatus(billing);
+
+    await prisma.subscriptionSettings.upsert({
       where: { shopDomain },
-      update: {},
-      create: { shopDomain }
-    }).catch(() => ({ plan: "FREE" }));
+      update: { plan: billingStatus.plan },
+      create: { shopDomain, plan: billingStatus.plan }
+    }).catch((error) => console.error("Failed to sync subscription status", error));
 
     return {
       totalReviews,
       pendingReviews,
       approvedReviews,
       brandWidgetStatus: "Active",
-      plan: subscription.plan === "ADVANCED" ? "ADVANCED" : "FREE"
+      plan: billingStatus.plan,
+      subscriptionId: billingStatus.subscriptionId
     };
   } catch (error) {
     if (error instanceof Response) {
@@ -124,18 +130,76 @@ function normalizeShopDomain(shopDomain: string) {
     .trim();
 }
 
+async function getBillingStatus(billing: any) {
+  const checks = await Promise.allSettled([
+    billing.check({ plans: [PRO_PLAN], isTest: false }),
+    billing.check({ plans: [PRO_PLAN], isTest: true })
+  ]);
+
+  for (const check of checks) {
+    if (check.status === "fulfilled" && check.value.hasActivePayment) {
+      return {
+        plan: "PRO" as const,
+        subscriptionId: check.value.appSubscriptions[0]?.id || ""
+      };
+    }
+  }
+
+  return {
+    plan: "FREE" as const,
+    subscriptionId: ""
+  };
+}
+
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
   const form = await request.formData();
-  const plan = String(form.get("plan") || "FREE") === "ADVANCED" ? "ADVANCED" : "FREE";
+  const intent = String(form.get("intent") || "");
+  const appOrigin = process.env.SHOPIFY_APP_URL || new URL(request.url).origin;
 
-  await prisma.subscriptionSettings.upsert({
-    where: { shopDomain: session.shop },
-    update: { plan },
-    create: { shopDomain: session.shop, plan }
-  });
+  if (intent === "upgrade") {
+    await billing.require({
+      plans: [PRO_PLAN],
+      isTest: isBillingTestMode(),
+      onFailure: async () => billing.request({
+        plan: PRO_PLAN,
+        isTest: isBillingTestMode(),
+        returnUrl: `${appOrigin}/app`
+      })
+    });
 
-  return { ok: true, plan };
+    await prisma.subscriptionSettings.upsert({
+      where: { shopDomain: session.shop },
+      update: { plan: "PRO" },
+      create: { shopDomain: session.shop, plan: "PRO" }
+    });
+
+    return { ok: true, plan: "PRO" };
+  }
+
+  if (intent === "cancel") {
+    let subscriptionId = String(form.get("subscriptionId") || "");
+    if (!subscriptionId) {
+      subscriptionId = (await getBillingStatus(billing)).subscriptionId;
+    }
+    if (subscriptionId) {
+      await billing.cancel({
+        subscriptionId,
+        isTest: isBillingTestMode(),
+        prorate: true
+      });
+    }
+
+    await prisma.subscriptionSettings.upsert({
+      where: { shopDomain: session.shop },
+      update: { plan: "FREE" },
+      create: { shopDomain: session.shop, plan: "FREE" }
+    });
+
+    return { ok: true, plan: "FREE" };
+  }
+
+  return { ok: false, plan: "FREE", error: "Unsupported billing action." };
 };
 
 export default function Dashboard() {
@@ -143,7 +207,22 @@ export default function Dashboard() {
   const fetcher = useFetcher<typeof action>();
   const [billingOpen, setBillingOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
-  const currentPlan: "FREE" | "ADVANCED" = fetcher.data?.plan === "ADVANCED" ? "ADVANCED" : data.plan;
+  const [showReviewBanner, setShowReviewBanner] = React.useState(false);
+  const currentPlan: "FREE" | "PRO" = fetcher.data?.plan === "PRO" ? "PRO" : fetcher.data?.plan === "FREE" ? "FREE" : data.plan;
+
+  React.useEffect(() => {
+    const dismissedUntil = Number(window.localStorage.getItem("fbr-app-review-dismissed-until") || 0);
+    setShowReviewBanner(!dismissedUntil || dismissedUntil < Date.now());
+  }, []);
+
+  const dismissReviewBanner = React.useCallback(() => {
+    window.localStorage.setItem("fbr-app-review-dismissed-until", String(Date.now() + 7 * 24 * 60 * 60 * 1000));
+    setShowReviewBanner(false);
+  }, []);
+
+  const openAppReviewPage = React.useCallback(() => {
+    window.open("https://apps.shopify.com/furniture-brand-reviews#reviews", "_blank", "noopener,noreferrer");
+  }, []);
 
   return (
     <Page fullWidth>
@@ -162,19 +241,38 @@ export default function Dashboard() {
                   objectPosition: "left center"
                 }}
               />
-              <Box background="bg-fill-info" borderRadius="300" padding="400">
-                <InlineStack align="space-between" blockAlign="center" gap="400">
-                  <BlockStack gap="200">
-                    <Text as="h2" variant="headingMd">How's your experience with Furniture Brand Reviews?</Text>
-                    <Text as="p">Rate us by clicking on the stars. <button type="button" style={{ background: "transparent", border: 0, color: "inherit", cursor: "pointer", padding: 0, textDecoration: "underline" }}>Dismiss</button></Text>
-                  </BlockStack>
-                  <InlineStack gap="100" wrap={false}>
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <span key={star} style={{ color: "#ffffff", fontSize: 28, lineHeight: 1 }}>☆</span>
-                    ))}
+              {showReviewBanner ? (
+                <Box background="bg-fill-info" borderRadius="300" padding="400">
+                  <InlineStack align="space-between" blockAlign="center" gap="400">
+                    <BlockStack gap="200">
+                      <Text as="h2" variant="headingMd">How's your experience with Furniture Brand Reviews?</Text>
+                      <Text as="p">
+                        Rate us by clicking on the stars.{" "}
+                        <button
+                          type="button"
+                          onClick={dismissReviewBanner}
+                          style={{ background: "transparent", border: 0, color: "inherit", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                        >
+                          Dismiss
+                        </button>
+                      </Text>
+                    </BlockStack>
+                    <InlineStack gap="100" wrap={false}>
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          aria-label={`Review Furniture Brand Reviews with ${star} star${star === 1 ? "" : "s"}`}
+                          onClick={openAppReviewPage}
+                          style={{ background: "transparent", border: 0, color: "#ffffff", cursor: "pointer", fontSize: 28, lineHeight: 1, padding: 0 }}
+                        >
+                          ☆
+                        </button>
+                      ))}
+                    </InlineStack>
                   </InlineStack>
-                </InlineStack>
-              </Box>
+                </Box>
+              ) : null}
             </BlockStack>
           </Card>
         </Layout.Section>
@@ -201,11 +299,11 @@ export default function Dashboard() {
               <InlineStack align="space-between" blockAlign="start" gap="400">
                 <BlockStack gap="200">
                   <Text as="h2" variant="headingLg">
-                    You're on the {currentPlan === "ADVANCED" ? "Advanced" : "Free"} plan
+                    You're on the {currentPlan === "PRO" ? "Pro" : "Free"} plan
                   </Text>
-                  <Text as="p" tone="subdued">Advanced plan: $9.90 / month, cancel anytime.</Text>
+                  <Text as="p" tone="subdued">Pro plan: {PRO_PLAN_PRICE}, 14-day trial, cancel anytime.</Text>
                 </BlockStack>
-                <Badge tone={currentPlan === "ADVANCED" ? "success" : "attention"}>{currentPlan === "ADVANCED" ? "Advanced" : "Free"}</Badge>
+                <Badge tone={currentPlan === "PRO" ? "success" : "attention"}>{currentPlan === "PRO" ? "Pro" : "Free"}</Badge>
               </InlineStack>
 
               <PlanComparisonTable currentPlan={currentPlan} />
@@ -217,13 +315,13 @@ export default function Dashboard() {
                   "Grow store visits",
                   "Increase sales",
                   "Unlimited essentials",
-                  "Fair value: $9.90 per month, cancel anytime"
+                  "Fair value: $9.99 per month, cancel anytime"
                 ].map((benefit) => (
                   <Text key={benefit} as="p">- {benefit}</Text>
                 ))}
               </InlineGrid>
               <InlineStack gap="300">
-                {currentPlan === "ADVANCED" ? (
+                {currentPlan === "PRO" ? (
                   <>
                     <Button variant="primary" onClick={() => setBillingOpen(true)}>Manage subscription</Button>
                     <Button tone="critical" onClick={() => setCancelOpen(true)}>End your subscription</Button>
@@ -232,7 +330,7 @@ export default function Dashboard() {
                   <Button
                     variant="primary"
                     loading={fetcher.state !== "idle"}
-                    onClick={() => fetcher.submit({ plan: "ADVANCED" }, { method: "post" })}
+                    onClick={() => fetcher.submit({ intent: "upgrade" }, { method: "post" })}
                   >
                     Upgrade your subscription
                   </Button>
@@ -264,7 +362,7 @@ export default function Dashboard() {
         primaryAction={{ content: "Close", onAction: () => setBillingOpen(false) }}
       >
         <Modal.Section>
-          <Text as="p">Billing page will be connected before launch.</Text>
+          <Text as="p">Your Pro subscription is active and managed through Shopify app billing.</Text>
         </Modal.Section>
       </Modal>
       <Modal
@@ -275,11 +373,11 @@ export default function Dashboard() {
           content: "Downgrade to Free plan",
           destructive: true,
           onAction: () => {
-            fetcher.submit({ plan: "FREE" }, { method: "post" });
+            fetcher.submit({ intent: "cancel", subscriptionId: data.subscriptionId }, { method: "post" });
             setCancelOpen(false);
           }
         }}
-        secondaryActions={[{ content: "Continue with Advanced plan", onAction: () => setCancelOpen(false) }]}
+        secondaryActions={[{ content: "Continue with Pro plan", onAction: () => setCancelOpen(false) }]}
       >
         <Modal.Section>
           <BlockStack gap="300">
@@ -287,7 +385,7 @@ export default function Dashboard() {
             <BlockStack gap="100">
               {[
                 "Review carousel",
-                "Advanced widgets",
+                "Pro widgets",
                 "Google and SEO settings",
                 "AI summary",
                 "Questions and Answers",
@@ -335,7 +433,7 @@ const planRows = [
   ["Priority support", false, true]
 ] as const;
 
-function PlanComparisonTable({ currentPlan }: { currentPlan: "FREE" | "ADVANCED" }) {
+function PlanComparisonTable({ currentPlan }: { currentPlan: "FREE" | "PRO" }) {
   return (
     <div style={{ overflowX: "auto" }}>
       <table style={{ borderCollapse: "collapse", minWidth: 620, tableLayout: "fixed", width: "100%" }}>
@@ -355,9 +453,9 @@ function PlanComparisonTable({ currentPlan }: { currentPlan: "FREE" | "ADVANCED"
             </th>
             <th style={planHeaderStyle}>
               <InlineStack gap="200" blockAlign="center" wrap>
-                <span>Advanced</span>
-                <Text as="span" tone="subdued">$9.90 / month</Text>
-                {currentPlan === "ADVANCED" ? <Badge tone="success">Current plan</Badge> : null}
+                <span>Pro</span>
+                <Text as="span" tone="subdued">{PRO_PLAN_PRICE}</Text>
+                {currentPlan === "PRO" ? <Badge tone="success">Current plan</Badge> : null}
               </InlineStack>
             </th>
           </tr>

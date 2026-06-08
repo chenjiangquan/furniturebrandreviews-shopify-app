@@ -38,7 +38,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     prisma.widgetSettings.upsert({
       where: { shopDomain },
       update: {
-        brandName: String(form.get("brandName") || "Weilai Concept"),
+        brandName: String(form.get("brandName") || ""),
         brandWebsite: String(form.get("brandWebsite") || ""),
         profileUrl: String(form.get("profileUrl") || ""),
         showAiSummary: form.get("showAiSummary") === "on",
@@ -82,7 +82,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     prisma.brandWidgetData.upsert({
       where: { shopDomain },
       update: {
-        brandName: String(form.get("brandName") || "Weilai Concept"),
+        brandName: String(form.get("brandName") || ""),
         profileUrl: String(form.get("profileUrl") || ""),
         aiSummary: String(form.get("aiSummary") || "")
       },

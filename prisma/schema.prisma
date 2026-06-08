@@ -56,10 +56,10 @@ model Shop {
 model WidgetSettings {
   id                    String   @id @default(cuid())
   shopDomain            String   @unique
-  brandName             String   @default("Weilai Concept")
+  brandName             String   @default("")
   brandSlug             String   @default("")
   brandWebsite          String?
-  profileUrl            String   @default("https://www.furniturebrandreviews.com")
+  profileUrl            String   @default("")
   showAiSummary         Boolean  @default(true)
   showTotalReviewCount  Boolean  @default(true)
   showRatingBreakdown   Boolean  @default(true)
@@ -78,13 +78,13 @@ model WidgetSettings {
 model BrandWidgetData {
   id              String   @id @default(cuid())
   shopDomain      String   @unique
-  brandName       String   @default("Weilai Concept")
+  brandName       String   @default("")
   rating          Float    @default(4.7)
   reviewCount     Int      @default(238)
   trustScore      Int      @default(94)
   aiSummary       String   @default("Customers often mention delivery, product quality and customer support.")
   ratingBreakdown String   @default("{\"5\":172,\"4\":44,\"3\":14,\"2\":5,\"1\":3}")
-  profileUrl      String   @default("https://www.furniturebrandreviews.com/review/weilai-concept")
+  profileUrl      String   @default("")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

@@ -2,13 +2,19 @@ import "@shopify/shopify-app-remix/adapters/node";
 import {
   ApiVersion,
   AppDistribution,
+  BillingInterval,
   shopifyApp
 } from "@shopify/shopify-app-remix/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+import { PRO_PLAN } from "./models/billing-plans";
 import { syncShopContactFromShopify } from "./models/notifications.server";
 
 const appUrl = process.env.SHOPIFY_CLI_TUNNEL_URL || process.env.SHOPIFY_APP_URL || "";
+
+export function isBillingTestMode() {
+  return process.env.SHOPIFY_BILLING_TEST === "true" || process.env.NODE_ENV !== "production";
+}
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -19,6 +25,18 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
+  billing: {
+    [PRO_PLAN]: {
+      trialDays: 14,
+      lineItems: [
+        {
+          amount: 9.99,
+          currencyCode: "USD",
+          interval: BillingInterval.Every30Days
+        }
+      ]
+    }
+  },
   future: {
     unstable_newEmbeddedAuthStrategy: true
   },
