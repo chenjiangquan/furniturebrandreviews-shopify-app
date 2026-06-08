@@ -14,6 +14,7 @@ import {
   Page,
   Text
 } from "@shopify/polaris";
+import { CheckIcon, XIcon } from "@shopify/polaris-icons";
 import prisma from "~/db.server";
 import { PRO_PLAN, PRO_PLAN_PRICE } from "~/models/billing-plans";
 import { normalizeLegacyReviewStatuses } from "~/models/reviews.server";
@@ -508,10 +509,24 @@ function PlanComparisonTable({ currentPlan }: { currentPlan: "FREE" | "PRO" }) {
 }
 
 function PlanMark({ enabled }: { enabled: boolean }) {
+  const Icon = enabled ? CheckIcon : XIcon;
   return (
-    <Text as="span" tone={enabled ? "success" : "subdued"} variant="headingMd">
-      {enabled ? "+" : "-"}
-    </Text>
+    <span
+      aria-label={enabled ? "Included" : "Not included"}
+      title={enabled ? "Included" : "Not included"}
+      style={{
+        alignItems: "center",
+        background: enabled ? "#d1fae5" : "#f3f4f6",
+        borderRadius: 999,
+        color: enabled ? "#047857" : "#6b7280",
+        display: "inline-flex",
+        height: 28,
+        justifyContent: "center",
+        width: 28
+      }}
+    >
+      <Icon aria-hidden="true" style={{ height: 18, width: 18 }} />
+    </span>
   );
 }
 
