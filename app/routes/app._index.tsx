@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { Link, useFetcher, useLoaderData } from "@remix-run/react";
+import { Form, Link, useFetcher, useLoaderData } from "@remix-run/react";
 import * as React from "react";
 import {
   Badge,
@@ -361,13 +361,12 @@ export default function Dashboard() {
                     </>
                   )
                 ) : (
-                  <Button
-                    variant="primary"
-                    loading={fetcher.state !== "idle"}
-                    onClick={() => fetcher.submit({ intent: "upgrade" }, { method: "post" })}
-                  >
-                    Upgrade your subscription
-                  </Button>
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="upgrade" />
+                    <Button variant="primary" submit>
+                      Upgrade your subscription
+                    </Button>
+                  </Form>
                 )}
               </InlineStack>
             </BlockStack>
