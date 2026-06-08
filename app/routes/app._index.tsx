@@ -17,7 +17,9 @@ import {
 import prisma from "~/db.server";
 import { PRO_PLAN, PRO_PLAN_PRICE } from "~/models/billing-plans";
 import { normalizeLegacyReviewStatuses } from "~/models/reviews.server";
-import { authenticate, isBillingTestMode } from "~/shopify.server";
+import { authenticate, isBillingTestMode, isFreeProShop } from "~/shopify.server";
+
+type PlanSource = "FREE" | "BILLING" | "FREE_PARTNER";
 
 type DashboardData = {
   totalReviews: number;
@@ -25,6 +27,7 @@ type DashboardData = {
   approvedReviews: number;
   brandWidgetStatus: string;
   plan: "FREE" | "PRO";
+  planSource: PlanSource;
   subscriptionId: string;
 };
 
@@ -34,6 +37,7 @@ const fallbackData: DashboardData = {
   approvedReviews: 0,
   brandWidgetStatus: "Active",
   plan: "FREE",
+  planSource: "FREE",
   subscriptionId: ""
 };
 
@@ -43,7 +47,9 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<Dashboard
     const shopDomain = session.shop;
     await normalizeLegacyReviewStatuses(shopDomain);
     const { totalReviews, pendingReviews, approvedReviews } = await getDashboardReviewStats(shopDomain);
-    const billingStatus = await getBillingStatus(billing);
+    const billingStatus = isFreeProShop(shopDomain)
+      ? { plan: "PRO" as const, planSource: "FREE_PARTNER" as const, subscriptionId: "" }
+      : await getBillingStatus(billing);
 
     await prisma.subscriptionSettings.upsert({
       where: { shopDomain },
@@ -57,6 +63,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<Dashboard
       approvedReviews,
       brandWidgetStatus: "Active",
       plan: billingStatus.plan,
+      planSource: billingStatus.planSource,
       subscriptionId: billingStatus.subscriptionId
     };
   } catch (error) {
@@ -140,6 +147,7 @@ async function getBillingStatus(billing: any) {
     if (check.status === "fulfilled" && check.value.hasActivePayment) {
       return {
         plan: "PRO" as const,
+        planSource: "BILLING" as const,
         subscriptionId: check.value.appSubscriptions[0]?.id || ""
       };
     }
@@ -147,6 +155,7 @@ async function getBillingStatus(billing: any) {
 
   return {
     plan: "FREE" as const,
+    planSource: "FREE" as const,
     subscriptionId: ""
   };
 }
@@ -156,6 +165,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const form = await request.formData();
   const intent = String(form.get("intent") || "");
   const appOrigin = process.env.SHOPIFY_APP_URL || new URL(request.url).origin;
+
+  if (isFreeProShop(session.shop)) {
+    await prisma.subscriptionSettings.upsert({
+      where: { shopDomain: session.shop },
+      update: { plan: "PRO" },
+      create: { shopDomain: session.shop, plan: "PRO" }
+    });
+
+    return { ok: true, plan: "PRO", planSource: "FREE_PARTNER" };
+  }
 
   if (intent === "upgrade") {
     await billing.require({
@@ -174,7 +193,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       create: { shopDomain: session.shop, plan: "PRO" }
     });
 
-    return { ok: true, plan: "PRO" };
+    return { ok: true, plan: "PRO", planSource: "BILLING" };
   }
 
   if (intent === "cancel") {
@@ -196,10 +215,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       create: { shopDomain: session.shop, plan: "FREE" }
     });
 
-    return { ok: true, plan: "FREE" };
+    return { ok: true, plan: "FREE", planSource: "FREE" };
   }
 
-  return { ok: false, plan: "FREE", error: "Unsupported billing action." };
+  return { ok: false, plan: "FREE", planSource: "FREE", error: "Unsupported billing action." };
 };
 
 export default function Dashboard() {
@@ -209,6 +228,11 @@ export default function Dashboard() {
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [showReviewBanner, setShowReviewBanner] = React.useState(false);
   const currentPlan: "FREE" | "PRO" = fetcher.data?.plan === "PRO" ? "PRO" : fetcher.data?.plan === "FREE" ? "FREE" : data.plan;
+  const currentPlanSource: PlanSource =
+    fetcher.data?.planSource === "FREE_PARTNER" || fetcher.data?.planSource === "BILLING" || fetcher.data?.planSource === "FREE"
+      ? fetcher.data.planSource
+      : data.planSource;
+  const hasFreePartnerAccess = currentPlanSource === "FREE_PARTNER";
 
   React.useEffect(() => {
     const dismissedUntil = Number(window.localStorage.getItem("fbr-app-review-dismissed-until") || 0);
@@ -301,7 +325,13 @@ export default function Dashboard() {
                   <Text as="h2" variant="headingLg">
                     You're on the {currentPlan === "PRO" ? "Pro" : "Free"} plan
                   </Text>
-                  <Text as="p" tone="subdued">Pro plan: {PRO_PLAN_PRICE}, 14-day trial, cancel anytime.</Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <Text as="p" tone="subdued">Pro plan: {PRO_PLAN_PRICE}, 14-day trial, cancel anytime.</Text>
+                    {hasFreePartnerAccess ? <Badge tone="info">Free partner access</Badge> : null}
+                  </InlineStack>
+                  {hasFreePartnerAccess ? (
+                    <Text as="p" tone="subdued">This shop is on your free Pro shop whitelist, so Shopify billing is not required.</Text>
+                  ) : null}
                 </BlockStack>
                 <Badge tone={currentPlan === "PRO" ? "success" : "attention"}>{currentPlan === "PRO" ? "Pro" : "Free"}</Badge>
               </InlineStack>
@@ -322,10 +352,14 @@ export default function Dashboard() {
               </InlineGrid>
               <InlineStack gap="300">
                 {currentPlan === "PRO" ? (
-                  <>
-                    <Button variant="primary" onClick={() => setBillingOpen(true)}>Manage subscription</Button>
-                    <Button tone="critical" onClick={() => setCancelOpen(true)}>End your subscription</Button>
-                  </>
+                  hasFreePartnerAccess ? (
+                    <Text as="p" tone="subdued">No subscription action is needed for this whitelisted shop.</Text>
+                  ) : (
+                    <>
+                      <Button variant="primary" onClick={() => setBillingOpen(true)}>Manage subscription</Button>
+                      <Button tone="critical" onClick={() => setCancelOpen(true)}>End your subscription</Button>
+                    </>
+                  )
                 ) : (
                   <Button
                     variant="primary"

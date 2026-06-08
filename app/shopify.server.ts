@@ -16,6 +16,27 @@ export function isBillingTestMode() {
   return process.env.SHOPIFY_BILLING_TEST === "true" || process.env.NODE_ENV !== "production";
 }
 
+export function isFreeProShop(shopDomain: string) {
+  const normalizedShop = normalizeShopDomainForFreePro(shopDomain);
+  if (!normalizedShop) {
+    return false;
+  }
+
+  return (process.env.FREE_PRO_SHOPS || "")
+    .split(",")
+    .map((shop) => normalizeShopDomainForFreePro(shop))
+    .filter(Boolean)
+    .includes(normalizedShop);
+}
+
+function normalizeShopDomainForFreePro(shopDomain: string) {
+  return shopDomain
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/.*$/, "")
+    .trim();
+}
+
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
