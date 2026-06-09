@@ -82,21 +82,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<Dashboard
 
 async function getDashboardReviewStats(shopDomain: string) {
   const candidateDomains = await dashboardReviewShopDomains(shopDomain);
-  let stats = await countReviewsForShopDomains(candidateDomains);
-
-  if (stats.totalReviews === 0) {
-    const publishedDomains = await prisma.productReview.findMany({
-      distinct: ["shopDomain"],
-      where: { status: "PUBLISHED" },
-      select: { shopDomain: true }
-    });
-    const fallbackDomains = publishedDomains.map((row) => row.shopDomain);
-    if (fallbackDomains.length) {
-      stats = await countReviewsForShopDomains(fallbackDomains);
-    }
-  }
-
-  return stats;
+  return countReviewsForShopDomains(candidateDomains);
 }
 
 async function dashboardReviewShopDomains(shopDomain: string) {
