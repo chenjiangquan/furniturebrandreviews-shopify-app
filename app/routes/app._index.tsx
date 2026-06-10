@@ -149,7 +149,7 @@ async function getBillingStatus(billing: any) {
 }
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { billing, session } = await authenticate.admin(request);
+  const { admin, billing, session } = await authenticate.admin(request);
   const form = await request.formData();
   const intent = String(form.get("intent") || "");
   const appOrigin = process.env.SHOPIFY_APP_URL || new URL(request.url).origin;
@@ -165,17 +165,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "upgrade") {
+    const useTestCharge = await shouldUseTestBilling(admin);
     console.log("[billing] Requesting Pro subscription approval", {
       shop: session.shop,
       plan: PRO_PLAN,
-      isTest: isBillingTestMode(),
+      isTest: useTestCharge,
       returnUrl: `${appOrigin}/app`
     });
 
     try {
       await billing.request({
         plan: PRO_PLAN,
-        isTest: isBillingTestMode(),
+        isTest: useTestCharge,
         returnUrl: `${appOrigin}/app`
       });
     } catch (error) {
@@ -202,7 +203,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (subscriptionId) {
       await billing.cancel({
         subscriptionId,
-        isTest: isBillingTestMode(),
+        isTest: await shouldUseTestBilling(admin),
         prorate: true
       });
     }
@@ -219,11 +220,43 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return { ok: false, plan: "FREE", planSource: "FREE", error: "Unsupported billing action." };
 };
 
+async function shouldUseTestBilling(admin: any) {
+  if (isBillingTestMode()) {
+    return true;
+  }
+
+  try {
+    const response = await admin.graphql(`
+      #graphql
+      query ShopBillingPlan {
+        shop {
+          plan {
+            displayName
+            partnerDevelopment
+          }
+        }
+      }
+    `);
+    const payload = await response.json();
+    const plan = payload?.data?.shop?.plan;
+
+    console.log("[billing] Shopify shop plan for billing mode", {
+      plan: plan?.displayName,
+      partnerDevelopment: plan?.partnerDevelopment
+    });
+
+    return Boolean(plan?.partnerDevelopment);
+  } catch (error) {
+    console.error("[billing] Could not detect shop plan for billing mode", billingErrorSummary(error));
+    return false;
+  }
+}
+
 function billingErrorMessage(error: unknown) {
   const summary = billingErrorSummary(error);
   const status = summary.networkStatusCode || summary.status || summary.responseCode;
   if (status === 403) {
-    return "Shopify refused the billing request. Please confirm this app is using Shopify Billing API pricing, not only App Store managed pricing, and that this store can accept test or live charges.";
+    return "Shopify refused the billing request. If this is a development store, make sure the app uses test billing. If this is a live store, confirm Shopify Billing API subscriptions are enabled for this app.";
   }
 
   return summary.message || "Shopify billing could not be started. Please try again.";
