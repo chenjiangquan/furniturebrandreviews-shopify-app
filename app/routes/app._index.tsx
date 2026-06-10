@@ -1,8 +1,9 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { Link, useFetcher, useLoaderData } from "@remix-run/react";
+import { Form, Link, useActionData, useFetcher, useLoaderData } from "@remix-run/react";
 import * as React from "react";
 import {
   Badge,
+  Banner,
   BlockStack,
   Box,
   Button,
@@ -41,8 +42,6 @@ const fallbackData: DashboardData = {
   planSource: "FREE",
   subscriptionId: ""
 };
-
-const APP_STORE_PRICING_URL = "https://apps.shopify.com/furniture-brand-reviews#pricing";
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<DashboardData> => {
   try {
@@ -153,6 +152,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { billing, session } = await authenticate.admin(request);
   const form = await request.formData();
   const intent = String(form.get("intent") || "");
+  const appOrigin = process.env.SHOPIFY_APP_URL || new URL(request.url).origin;
 
   if (isFreeProShop(session.shop)) {
     await prisma.subscriptionSettings.upsert({
@@ -165,18 +165,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "upgrade") {
-    console.log("[billing] Upgrade requested from embedded app. Redirect merchant to App Store managed pricing.", {
+    console.log("[billing] Requesting Pro subscription approval", {
       shop: session.shop,
-      appStorePricingUrl: APP_STORE_PRICING_URL
+      plan: PRO_PLAN,
+      isTest: isBillingTestMode(),
+      returnUrl: `${appOrigin}/app`
     });
 
-    return {
-      ok: false,
-      plan: "FREE",
-      planSource: "FREE",
-      billingRedirectUrl: APP_STORE_PRICING_URL,
-      error: "Please upgrade through the Shopify App Store pricing page."
-    };
+    try {
+      await billing.request({
+        plan: PRO_PLAN,
+        isTest: isBillingTestMode(),
+        returnUrl: `${appOrigin}/app`
+      });
+    } catch (error) {
+      if (error instanceof Response) {
+        throw error;
+      }
+
+      console.error("[billing] Pro subscription request failed", billingErrorSummary(error));
+
+      return {
+        ok: false,
+        plan: "FREE",
+        planSource: "FREE",
+        error: billingErrorMessage(error)
+      };
+    }
   }
 
   if (intent === "cancel") {
@@ -204,8 +219,42 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return { ok: false, plan: "FREE", planSource: "FREE", error: "Unsupported billing action." };
 };
 
+function billingErrorMessage(error: unknown) {
+  const summary = billingErrorSummary(error);
+  const status = summary.networkStatusCode || summary.status || summary.responseCode;
+  if (status === 403) {
+    return "Shopify refused the billing request. Please confirm this app is using Shopify Billing API pricing, not only App Store managed pricing, and that this store can accept test or live charges.";
+  }
+
+  return summary.message || "Shopify billing could not be started. Please try again.";
+}
+
+function billingErrorSummary(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return { message: String(error) };
+  }
+
+  const errorRecord = error as {
+    message?: string;
+    networkStatusCode?: number;
+    status?: number;
+    statusText?: string;
+    response?: { code?: number; status?: number; statusText?: string };
+  };
+
+  return {
+    message: errorRecord.message,
+    networkStatusCode: errorRecord.networkStatusCode,
+    status: errorRecord.status,
+    statusText: errorRecord.statusText,
+    responseCode: errorRecord.response?.code || errorRecord.response?.status,
+    responseStatusText: errorRecord.response?.statusText
+  };
+}
+
 export default function Dashboard() {
   const data = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
   const fetcher = useFetcher<typeof action>();
   const [billingOpen, setBillingOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
@@ -344,9 +393,19 @@ export default function Dashboard() {
                     </>
                   )
                 ) : (
-                  <Button variant="primary" url={APP_STORE_PRICING_URL} target="_blank" external>
-                    Upgrade your subscription
-                  </Button>
+                  <BlockStack gap="300">
+                    {actionData && "error" in actionData && actionData.error ? (
+                      <Banner tone="critical">
+                        <Text as="p">{actionData.error}</Text>
+                      </Banner>
+                    ) : null}
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="upgrade" />
+                      <Button variant="primary" submit>
+                        Upgrade your subscription
+                      </Button>
+                    </Form>
+                  </BlockStack>
                 )}
               </InlineStack>
             </BlockStack>
