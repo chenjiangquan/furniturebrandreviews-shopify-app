@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { Form, Link, useFetcher, useLoaderData } from "@remix-run/react";
+import { Link, useFetcher, useLoaderData } from "@remix-run/react";
 import * as React from "react";
 import {
   Badge,
@@ -41,6 +41,8 @@ const fallbackData: DashboardData = {
   planSource: "FREE",
   subscriptionId: ""
 };
+
+const APP_STORE_PRICING_URL = "https://apps.shopify.com/furniture-brand-reviews#pricing";
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<DashboardData> => {
   try {
@@ -151,7 +153,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { billing, session } = await authenticate.admin(request);
   const form = await request.formData();
   const intent = String(form.get("intent") || "");
-  const appOrigin = process.env.SHOPIFY_APP_URL || new URL(request.url).origin;
 
   if (isFreeProShop(session.shop)) {
     await prisma.subscriptionSettings.upsert({
@@ -164,23 +165,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "upgrade") {
-    await billing.require({
-      plans: [PRO_PLAN],
-      isTest: isBillingTestMode(),
-      onFailure: async () => billing.request({
-        plan: PRO_PLAN,
-        isTest: isBillingTestMode(),
-        returnUrl: `${appOrigin}/app`
-      })
+    console.log("[billing] Upgrade requested from embedded app. Redirect merchant to App Store managed pricing.", {
+      shop: session.shop,
+      appStorePricingUrl: APP_STORE_PRICING_URL
     });
 
-    await prisma.subscriptionSettings.upsert({
-      where: { shopDomain: session.shop },
-      update: { plan: "PRO" },
-      create: { shopDomain: session.shop, plan: "PRO" }
-    });
-
-    return { ok: true, plan: "PRO", planSource: "BILLING" };
+    return {
+      ok: false,
+      plan: "FREE",
+      planSource: "FREE",
+      billingRedirectUrl: APP_STORE_PRICING_URL,
+      error: "Please upgrade through the Shopify App Store pricing page."
+    };
   }
 
   if (intent === "cancel") {
@@ -348,12 +344,9 @@ export default function Dashboard() {
                     </>
                   )
                 ) : (
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="upgrade" />
-                    <Button variant="primary" submit>
-                      Upgrade your subscription
-                    </Button>
-                  </Form>
+                  <Button variant="primary" url={APP_STORE_PRICING_URL} target="_blank" external>
+                    Upgrade your subscription
+                  </Button>
                 )}
               </InlineStack>
             </BlockStack>
