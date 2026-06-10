@@ -79,7 +79,11 @@ export function ErrorBoundary() {
 
   try {
     return boundary.error(error);
-  } catch (_boundaryError) {
+  } catch (boundaryError) {
+    if (boundaryError instanceof Response) {
+      throw boundaryError;
+    }
+
     // Fall back to a merchant-friendly message for ordinary route errors, while
     // still allowing Shopify's special App Bridge responses to keep their headers.
   }
