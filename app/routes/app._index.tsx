@@ -1,9 +1,8 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { Form, Link, useActionData, useFetcher, useLoaderData } from "@remix-run/react";
+import { Form, Link, useLoaderData } from "@remix-run/react";
 import * as React from "react";
 import {
   Badge,
-  Banner,
   BlockStack,
   Box,
   Button,
@@ -19,7 +18,7 @@ import { CheckIcon, XIcon } from "@shopify/polaris-icons";
 import prisma from "~/db.server";
 import { PRO_PLAN, PRO_PLAN_PRICE } from "~/models/billing-plans";
 import { normalizeLegacyReviewStatuses } from "~/models/reviews.server";
-import { authenticate, isBillingTestMode, isFreeProShop } from "~/shopify.server";
+import { authenticate, isFreeProShop } from "~/shopify.server";
 
 type PlanSource = "FREE" | "BILLING" | "FREE_PARTNER";
 
@@ -149,10 +148,9 @@ async function getBillingStatus(billing: any) {
 }
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, billing, session } = await authenticate.admin(request);
+  const { redirect, session } = await authenticate.admin(request);
   const form = await request.formData();
   const intent = String(form.get("intent") || "");
-  const appOrigin = process.env.SHOPIFY_APP_URL || new URL(request.url).origin;
 
   if (isFreeProShop(session.shop)) {
     await prisma.subscriptionSettings.upsert({
@@ -164,139 +162,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { ok: true, plan: "PRO", planSource: "FREE_PARTNER" };
   }
 
-  if (intent === "upgrade") {
-    const useTestCharge = await shouldUseTestBilling(admin);
-    console.log("[billing] Requesting Pro subscription approval", {
+  if (intent === "upgrade" || intent === "manage") {
+    const planSelectionUrl = buildShopifyPlanSelectionUrl(session.shop);
+    console.log("[billing] Redirecting to Shopify App Pricing plan selection", {
       shop: session.shop,
-      plan: PRO_PLAN,
-      isTest: useTestCharge,
-      returnUrl: `${appOrigin}/app`
+      planSelectionUrl
     });
 
-    try {
-      await billing.request({
-        plan: PRO_PLAN,
-        isTest: useTestCharge,
-        returnUrl: `${appOrigin}/app`
-      });
-    } catch (error) {
-      if (error instanceof Response) {
-        throw error;
-      }
-
-      console.error("[billing] Pro subscription request failed", billingErrorSummary(error));
-
-      return {
-        ok: false,
-        plan: "FREE",
-        planSource: "FREE",
-        error: billingErrorMessage(error)
-      };
-    }
-  }
-
-  if (intent === "cancel") {
-    let subscriptionId = String(form.get("subscriptionId") || "");
-    if (!subscriptionId) {
-      subscriptionId = (await getBillingStatus(billing)).subscriptionId;
-    }
-    if (subscriptionId) {
-      await billing.cancel({
-        subscriptionId,
-        isTest: await shouldUseTestBilling(admin),
-        prorate: true
-      });
-    }
-
-    await prisma.subscriptionSettings.upsert({
-      where: { shopDomain: session.shop },
-      update: { plan: "FREE" },
-      create: { shopDomain: session.shop, plan: "FREE" }
-    });
-
-    return { ok: true, plan: "FREE", planSource: "FREE" };
+    return redirect(planSelectionUrl, { target: "_top" });
   }
 
   return { ok: false, plan: "FREE", planSource: "FREE", error: "Unsupported billing action." };
 };
 
-async function shouldUseTestBilling(admin: any) {
-  if (isBillingTestMode()) {
-    return true;
-  }
+function buildShopifyPlanSelectionUrl(shopDomain: string) {
+  const storeHandle = shopDomain
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(".myshopify.com", "")
+    .replace(/\/.*$/, "")
+    .trim();
+  const appHandle = process.env.SHOPIFY_APP_HANDLE || "furniture-brand-reviews";
 
-  try {
-    const response = await admin.graphql(`
-      #graphql
-      query ShopBillingPlan {
-        shop {
-          plan {
-            displayName
-            partnerDevelopment
-          }
-        }
-      }
-    `);
-    const payload = await response.json();
-    const plan = payload?.data?.shop?.plan;
-
-    console.log("[billing] Shopify shop plan for billing mode", {
-      plan: plan?.displayName,
-      partnerDevelopment: plan?.partnerDevelopment
-    });
-
-    return Boolean(plan?.partnerDevelopment);
-  } catch (error) {
-    console.error("[billing] Could not detect shop plan for billing mode", billingErrorSummary(error));
-    return false;
-  }
-}
-
-function billingErrorMessage(error: unknown) {
-  const summary = billingErrorSummary(error);
-  const status = summary.networkStatusCode || summary.status || summary.responseCode;
-  if (status === 403) {
-    return "Shopify refused the billing request. If this is a development store, make sure the app uses test billing. If this is a live store, confirm Shopify Billing API subscriptions are enabled for this app.";
-  }
-
-  return summary.message || "Shopify billing could not be started. Please try again.";
-}
-
-function billingErrorSummary(error: unknown) {
-  if (!error || typeof error !== "object") {
-    return { message: String(error) };
-  }
-
-  const errorRecord = error as {
-    message?: string;
-    networkStatusCode?: number;
-    status?: number;
-    statusText?: string;
-    response?: { code?: number; status?: number; statusText?: string };
-  };
-
-  return {
-    message: errorRecord.message,
-    networkStatusCode: errorRecord.networkStatusCode,
-    status: errorRecord.status,
-    statusText: errorRecord.statusText,
-    responseCode: errorRecord.response?.code || errorRecord.response?.status,
-    responseStatusText: errorRecord.response?.statusText
-  };
+  return `https://admin.shopify.com/store/${storeHandle}/charges/${appHandle}/pricing_plans`;
 }
 
 export default function Dashboard() {
   const data = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
-  const fetcher = useFetcher<typeof action>();
   const [billingOpen, setBillingOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [showReviewBanner, setShowReviewBanner] = React.useState(false);
-  const currentPlan: "FREE" | "PRO" = fetcher.data?.plan === "PRO" ? "PRO" : fetcher.data?.plan === "FREE" ? "FREE" : data.plan;
-  const currentPlanSource: PlanSource =
-    fetcher.data?.planSource === "FREE_PARTNER" || fetcher.data?.planSource === "BILLING" || fetcher.data?.planSource === "FREE"
-      ? fetcher.data.planSource
-      : data.planSource;
+  const currentPlan = data.plan;
+  const currentPlanSource = data.planSource;
   const hasFreePartnerAccess = currentPlanSource === "FREE_PARTNER";
 
   React.useEffect(() => {
@@ -422,23 +319,16 @@ export default function Dashboard() {
                   ) : (
                     <>
                       <Button variant="primary" onClick={() => setBillingOpen(true)}>Manage subscription</Button>
-                      <Button tone="critical" onClick={() => setCancelOpen(true)}>End your subscription</Button>
+                      <Button tone="critical" onClick={() => setCancelOpen(true)}>Change or cancel subscription</Button>
                     </>
                   )
                 ) : (
-                  <BlockStack gap="300">
-                    {actionData && "error" in actionData && actionData.error ? (
-                      <Banner tone="critical">
-                        <Text as="p">{actionData.error}</Text>
-                      </Banner>
-                    ) : null}
-                    <Form method="post">
-                      <input type="hidden" name="intent" value="upgrade" />
-                      <Button variant="primary" submit>
-                        Upgrade your subscription
-                      </Button>
-                    </Form>
-                  </BlockStack>
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="upgrade" />
+                    <Button variant="primary" submit>
+                      Upgrade your subscription
+                    </Button>
+                  </Form>
                 )}
               </InlineStack>
             </BlockStack>
@@ -467,26 +357,28 @@ export default function Dashboard() {
         primaryAction={{ content: "Close", onAction: () => setBillingOpen(false) }}
       >
         <Modal.Section>
-          <Text as="p">Your Pro subscription is active and managed through Shopify app billing.</Text>
+          <BlockStack gap="300">
+            <Text as="p">Your subscription is managed by Shopify App Pricing.</Text>
+            <Form method="post">
+              <input type="hidden" name="intent" value="manage" />
+              <Button variant="primary" submit>Open Shopify plan selection</Button>
+            </Form>
+          </BlockStack>
         </Modal.Section>
       </Modal>
       <Modal
         open={cancelOpen}
         onClose={() => setCancelOpen(false)}
-        title="Are you sure you want to cancel?"
+        title="Change or cancel subscription"
         primaryAction={{
-          content: "Downgrade to Free plan",
-          destructive: true,
-          onAction: () => {
-            fetcher.submit({ intent: "cancel", subscriptionId: data.subscriptionId }, { method: "post" });
-            setCancelOpen(false);
-          }
+          content: "Open Shopify plan selection",
+          onAction: () => document.getElementById("fbr-manage-plan-submit")?.click()
         }}
-        secondaryActions={[{ content: "Continue with Pro plan", onAction: () => setCancelOpen(false) }]}
+        secondaryActions={[{ content: "Keep current plan", onAction: () => setCancelOpen(false) }]}
       >
         <Modal.Section>
           <BlockStack gap="300">
-            <Text as="p" tone="subdued">After canceling, you will lose access to:</Text>
+            <Text as="p" tone="subdued">Shopify will show the available Free and Pro plans for this app. If you switch to Free, you will lose access to:</Text>
             <BlockStack gap="100">
               {[
                 "Review carousel",
@@ -498,6 +390,10 @@ export default function Dashboard() {
                 "Social/Google integrations"
               ].map((item) => <Text key={item} as="p">- {item}</Text>)}
             </BlockStack>
+            <Form method="post">
+              <input type="hidden" name="intent" value="manage" />
+              <button id="fbr-manage-plan-submit" type="submit" style={{ display: "none" }} />
+            </Form>
           </BlockStack>
         </Modal.Section>
       </Modal>
