@@ -29,19 +29,34 @@ NOTIFICATION_FROM_EMAIL=
 
 ## Database
 
-Production uses PostgreSQL on Railway with:
+Production uses PostgreSQL with:
 
 ```bash
 prisma/schema.postgresql.prisma
 ```
 
-Railway build command:
+Current migration target: Supabase PostgreSQL + Vercel. See
+`SUPABASE_VERCEL_MIGRATION.md`.
+
+Vercel build command:
+
+```bash
+npm run build:vercel
+```
+
+Manual production migration command:
+
+```bash
+DATABASE_URL="postgresql://..." npm run db:migrate:prod
+```
+
+Legacy Railway build command:
 
 ```bash
 npm install && npx prisma generate --schema prisma/schema.postgresql.prisma && npm run build
 ```
 
-Railway start command:
+Legacy Railway start command:
 
 ```bash
 npx prisma migrate deploy --schema prisma/schema.postgresql.prisma && npm run start
@@ -74,9 +89,11 @@ Listing URLs:
 ## Deploy Backend
 
 1. Commit and push to `main`.
-2. Railway deploys from GitHub.
-3. Confirm the active Railway deployment uses the latest commit.
-4. Confirm migrations run successfully with `prisma/schema.postgresql.prisma`.
+2. Vercel deploys from GitHub.
+3. Confirm the active Vercel deployment uses the latest commit.
+4. Run production migrations manually against Supabase:
+   `DATABASE_URL="postgresql://..." npm run db:migrate:prod`.
+5. Confirm `https://app.furniturebrandreviews.com` points to Vercel.
 
 ## Deploy Theme App Extension
 
