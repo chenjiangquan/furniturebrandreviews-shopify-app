@@ -47,6 +47,7 @@ SCOPES=read_products,read_themes
 SHOPIFY_APP_HANDLE=furniture-brand-reviews
 RESEND_API_KEY=
 NOTIFICATION_FROM_EMAIL=
+APP_OWNER_NOTIFICATION_EMAIL=
 ```
 
 If you use the free Pro shop whitelist, also set:

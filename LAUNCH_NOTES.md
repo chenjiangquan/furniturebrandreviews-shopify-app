@@ -25,6 +25,7 @@ Email notifications:
 ```bash
 RESEND_API_KEY=
 NOTIFICATION_FROM_EMAIL=
+APP_OWNER_NOTIFICATION_EMAIL=
 ```
 
 ## Database

@@ -127,6 +127,45 @@ export async function sendTestNotificationEmail(shopDomain: string) {
   return result;
 }
 
+export async function sendAppInstallOwnerNotification(shopDomain: string, event: "install" | "reinstall" = "install") {
+  try {
+    const to = String(process.env.APP_OWNER_NOTIFICATION_EMAIL || "").trim();
+    if (!to) {
+      console.log("[email] APP_OWNER_NOTIFICATION_EMAIL is not configured; skipping owner install notification.");
+      return;
+    }
+
+    const shop = await getShopForNotification(shopDomain);
+    const eventLabel = event === "reinstall" ? "Shopify app reinstalled" : "New Shopify app install";
+    console.log("[email] sending app install notification to", to);
+
+    await sendEmail({
+      to,
+      subject: `${eventLabel}: ${shop.shopDomain}`,
+      html: baseEmailTemplate({
+        eyebrow: eventLabel,
+        heading: `${eventLabel} received`,
+        intro: "A merchant installed Furniture Brand Reviews on their Shopify store.",
+        shopDomain: shop.shopDomain,
+        ctaUrl: adminAppUrl(shop.shopDomain),
+        ctaLabel: "Open Shopify app",
+        content: `
+          ${infoRows([
+            ["Store", shop.storeName || shop.shopDomain],
+            ["Shop domain", shop.shopDomain],
+            ["Store email", shop.storeEmail || shop.contactEmail || shop.shopOwnerEmail || "Not available"],
+            ["Notification email", shop.notificationEmail || "Not configured"],
+            ["Event", eventLabel],
+            ["Installed at", formatEmailDate(new Date())]
+          ])}
+        `
+      })
+    });
+  } catch (error) {
+    console.error("Failed to send app install owner notification email", error);
+  }
+}
+
 async function getShopForNotification(shopDomain: string) {
   return prisma.shop.upsert({
     where: { shopDomain },
@@ -193,6 +232,11 @@ function adminProductReviewsUrl(shopDomain: string) {
   return `https://admin.shopify.com/store/${shopHandle}/apps/furniture-brand-reviews/app/product-reviews`;
 }
 
+function adminAppUrl(shopDomain: string) {
+  const shopHandle = shopDomain.replace(/\.myshopify\.com$/i, "");
+  return `https://admin.shopify.com/store/${shopHandle}/apps/furniture-brand-reviews`;
+}
+
 function reviewEmailTemplate(shop: Shop, review: ProductReview) {
   return baseEmailTemplate({
     eyebrow: "New product review",
@@ -247,8 +291,11 @@ function baseEmailTemplate(input: {
   intro: string;
   content: string;
   shopDomain: string;
+  ctaUrl?: string;
+  ctaLabel?: string;
 }) {
-  const adminUrl = adminProductReviewsUrl(input.shopDomain);
+  const adminUrl = input.ctaUrl || adminProductReviewsUrl(input.shopDomain);
+  const ctaLabel = input.ctaLabel || "Open Product Reviews";
   return `
     <div style="margin:0;padding:0;background:#f3f5f6;">
       <div style="display:none;max-height:0;overflow:hidden;color:#f3f5f6;">${escapeHtml(input.heading)}</div>
@@ -271,7 +318,7 @@ function baseEmailTemplate(input: {
                   <p style="font-size:15px;line-height:24px;color:#475467;margin:0 0 18px;">${escapeHtml(input.intro)}</p>
                   ${input.content}
                   <div style="margin-top:24px;">
-                    <a href="${adminUrl}" style="display:inline-block;background:#1f6f64;color:#ffffff;text-decoration:none;font-size:15px;line-height:20px;font-weight:700;padding:12px 18px;border-radius:10px;">Open Product Reviews</a>
+                    <a href="${adminUrl}" style="display:inline-block;background:#1f6f64;color:#ffffff;text-decoration:none;font-size:15px;line-height:20px;font-weight:700;padding:12px 18px;border-radius:10px;">${escapeHtml(ctaLabel)}</a>
                   </div>
                 </td>
               </tr>

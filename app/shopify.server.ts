@@ -8,7 +8,7 @@ import {
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
 import { PRO_PLAN } from "./models/billing-plans";
-import { syncShopContactFromShopify } from "./models/notifications.server";
+import { sendAppInstallOwnerNotification, syncShopContactFromShopify } from "./models/notifications.server";
 
 const appUrl = process.env.SHOPIFY_CLI_TUNNEL_URL || process.env.SHOPIFY_APP_URL || "";
 
@@ -63,6 +63,12 @@ const shopify = shopifyApp({
   },
   hooks: {
     afterAuth: async ({ session }) => {
+      const existingShop = await prisma.shop.findUnique({
+        where: { shopDomain: session.shop },
+        select: { isActive: true }
+      });
+      const installEvent = !existingShop ? "install" : existingShop.isActive === false ? "reinstall" : null;
+
       await prisma.shop.upsert({
         where: { shopDomain: session.shop },
         update: {
@@ -97,6 +103,10 @@ const shopify = shopifyApp({
           create: { shopDomain: session.shop }
         })
       ]);
+
+      if (installEvent) {
+        await sendAppInstallOwnerNotification(session.shop, installEvent);
+      }
     }
   }
 });
