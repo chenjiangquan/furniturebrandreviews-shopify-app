@@ -928,13 +928,13 @@ function ImportReviewsModal({ open, onClose }: { open: boolean; onClose: () => v
       <Modal.Section>
         <BlockStack gap="300">
           <InlineStack align="space-between" blockAlign="center" gap="300">
-            <Text as="p" tone="subdued">Upload reviews with the Furniture Brand Reviews CSV format.</Text>
+            <Text as="p" tone="subdued">Upload reviews with the Furniture Brand Reviews CSV format or a Judge.me reviews export.</Text>
             <Button onClick={downloadCsvTemplate}>Download CSV template</Button>
           </InlineStack>
           <Card>
             <BlockStack gap="300">
               <Text as="p" variant="headingSm">CSV file</Text>
-              <Text as="p" tone="subdued">CSV columns: productHandle, productTitle, customerName, customerEmail, rating, title, content, imageUrl, status, verifiedPurchase, createdAt</Text>
+              <Text as="p" tone="subdued">Supported columns: productHandle, productTitle, customerName, customerEmail, rating, title, content, imageUrl, status, verifiedPurchase, createdAt. Judge.me exports are mapped automatically.</Text>
               <input
                 ref={inputRef}
                 type="file"
@@ -1120,11 +1120,14 @@ async function importReviewsFromCsv(shopDomain: string, csvText: string) {
   const [header = [], ...records] = rows;
   const fields = header.map((field) => field.trim());
   const importedAt = new Date();
-  const requiredHeaders = ["customerName", "rating", "title", "content"];
+  const isJudgeMeCsv = fields.includes("reviewer_name") || fields.includes("body") || fields.includes("product_handle");
+  const requiredHeaders = isJudgeMeCsv
+    ? ["reviewer_name", "rating", "title", "body"]
+    : ["customerName", "rating", "title", "content"];
   const missingHeaders = requiredHeaders.filter((field) => !fields.includes(field));
 
   if (!fields.length || missingHeaders.length) {
-    throw new Error(`CSV header missing: ${missingHeaders.join(", ") || "header row"}.`);
+    throw new Error(`CSV header missing: ${missingHeaders.join(", ") || "header row"}. Supported formats: Furniture Brand Reviews CSV or Judge.me reviews CSV.`);
   }
 
   if (!records.some((record) => record.some((value) => value.trim()))) {
@@ -1137,24 +1140,26 @@ async function importReviewsFromCsv(shopDomain: string, csvText: string) {
     if (record.every((value) => !value.trim())) continue;
     try {
       const row = Object.fromEntries(fields.map((field, index) => [field, record[index] || ""]));
-      const createdAt = parseCsvDate(row.createdAt) || importedAt;
+      const importedReview = normalizeImportedReviewRow(row, importedAt, isJudgeMeCsv);
 
       await prisma.productReview.create({
         data: {
           shopDomain,
-          productId: row.productId || "",
-          productHandle: row.productHandle || "",
-          productTitle: row.productTitle || "",
-          customerName: requiredString(row.customerName, "customerName"),
-          customerEmail: row.customerEmail || "",
-          rating: clampRating(row.rating || "5"),
-          title: requiredString(row.title, "title"),
-          content: requiredString(row.content, "content"),
-          status: normalizeImportedStatus(row.status),
+          productId: importedReview.productId,
+          productHandle: importedReview.productHandle,
+          productTitle: importedReview.productTitle,
+          customerName: requiredString(importedReview.customerName, "customerName"),
+          customerEmail: importedReview.customerEmail,
+          rating: clampRating(importedReview.rating || "5"),
+          title: requiredString(importedReview.title, "title"),
+          content: requiredString(importedReview.content, "content"),
+          status: importedReview.status,
           source: "IMPORTED",
-          verifiedPurchase: parseBoolean(row.verifiedPurchase),
-          imageUrl: row.imageUrl || "",
-          createdAt
+          verifiedPurchase: importedReview.verifiedPurchase,
+          imageUrl: importedReview.imageUrl,
+          merchantReply: importedReview.merchantReply,
+          repliedAt: importedReview.repliedAt,
+          createdAt: importedReview.createdAt
         }
       });
       importedCount += 1;
@@ -1164,6 +1169,48 @@ async function importReviewsFromCsv(shopDomain: string, csvText: string) {
   }
 
   return importedCount;
+}
+
+type ImportedCsvRow = Record<string, string>;
+
+function normalizeImportedReviewRow(row: ImportedCsvRow, importedAt: Date, isJudgeMeCsv: boolean) {
+  if (isJudgeMeCsv) {
+    const reply = getCsvField(row, "reply").trim();
+    return {
+      productId: getCsvField(row, "product_id", "productId"),
+      productHandle: getCsvField(row, "product_handle", "productHandle"),
+      productTitle: getCsvField(row, "product_title", "productTitle"),
+      customerName: getCsvField(row, "reviewer_name", "customerName"),
+      customerEmail: getCsvField(row, "reviewer_email", "customerEmail"),
+      rating: getCsvField(row, "rating"),
+      title: getCsvField(row, "title"),
+      content: getCsvField(row, "body", "content"),
+      status: normalizeJudgeMeStatus(getCsvField(row, "curated", "status")),
+      verifiedPurchase: parseBoolean(getCsvField(row, "verifiedPurchase", "verified_purchase")),
+      imageUrl: firstImageUrl(getCsvField(row, "picture_urls", "imageUrl")),
+      merchantReply: reply || null,
+      repliedAt: reply ? parseCsvDate(getCsvField(row, "reply_date", "repliedAt")) : null,
+      createdAt: parseCsvDate(getCsvField(row, "review_date", "createdAt")) || importedAt
+    };
+  }
+
+  const reply = getCsvField(row, "merchantReply", "reply").trim();
+  return {
+    productId: getCsvField(row, "productId", "product_id"),
+    productHandle: getCsvField(row, "productHandle", "product_handle"),
+    productTitle: getCsvField(row, "productTitle", "product_title"),
+    customerName: getCsvField(row, "customerName", "reviewer_name"),
+    customerEmail: getCsvField(row, "customerEmail", "reviewer_email"),
+    rating: getCsvField(row, "rating"),
+    title: getCsvField(row, "title"),
+    content: getCsvField(row, "content", "body"),
+    status: normalizeImportedStatus(getCsvField(row, "status")),
+    verifiedPurchase: parseBoolean(getCsvField(row, "verifiedPurchase", "verified_purchase")),
+    imageUrl: firstImageUrl(getCsvField(row, "imageUrl", "picture_urls")),
+    merchantReply: reply || null,
+    repliedAt: reply ? parseCsvDate(getCsvField(row, "repliedAt", "reply_date")) : null,
+    createdAt: parseCsvDate(getCsvField(row, "createdAt", "review_date")) || importedAt
+  };
 }
 
 async function importErrorMessage(error: unknown) {
@@ -1179,6 +1226,27 @@ async function importErrorMessage(error: unknown) {
   return "CSV import failed.";
 }
 
+function getCsvField(row: ImportedCsvRow, ...names: string[]) {
+  for (const name of names) {
+    const value = row[name];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+function normalizeJudgeMeStatus(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (["ok", "published", "approved", "curated", "1", "true", "yes"].includes(normalized)) {
+    return "PUBLISHED";
+  }
+  if (["spam"].includes(normalized)) return "SPAM";
+  if (["archived", "archive"].includes(normalized)) return "ARCHIVED";
+  if (["rejected", "declined"].includes(normalized)) return "REJECTED";
+  return "PENDING";
+}
+
 function normalizeImportedStatus(status: string) {
   const normalized = status.trim().toUpperCase();
   if (normalized === "APPROVED" || normalized === "PUBLISHED") return "PUBLISHED";
@@ -1192,7 +1260,15 @@ function parseBoolean(value: string) {
   return ["1", "true", "yes", "y", "on"].includes(value.trim().toLowerCase());
 }
 
+function firstImageUrl(value: string) {
+  return value
+    .split(/[\n,|]+/)
+    .map((url) => url.trim())
+    .find(Boolean) || "";
+}
+
 function parseCsvDate(value: string) {
+  if (!value.trim()) return null;
   const timestamp = Date.parse(value);
   return Number.isNaN(timestamp) ? null : new Date(timestamp);
 }
