@@ -234,8 +234,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return { ok: false, error: "CSV file is required." };
       }
 
-      const importedCount = await importReviewsFromCsv(session.shop, await file.text());
-      return { ok: true, error: "", importedCount };
+      const importResult = await importReviewsFromCsv(session.shop, await file.text());
+      return { ok: true, error: "", ...importResult };
     } catch (error) {
       console.error("CSV import failed", error);
       return { ok: false, error: await importErrorMessage(error) };
@@ -903,7 +903,8 @@ function ImportReviewsModal({ open, onClose }: { open: boolean; onClose: () => v
   React.useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.ok && file) {
       const importedCount = "importedCount" in fetcher.data ? Number(fetcher.data.importedCount || 0) : 0;
-      setSuccessMessage(`Import successful. ${importedCount} ${importedCount === 1 ? "review was" : "reviews were"} imported.`);
+      const skippedCount = "skippedCount" in fetcher.data ? Number(fetcher.data.skippedCount || 0) : 0;
+      setSuccessMessage(`Import successful. ${importedCount} ${importedCount === 1 ? "review was" : "reviews were"} imported. ${skippedCount} duplicate ${skippedCount === 1 ? "review was" : "reviews were"} skipped.`);
       setFile(null);
     }
   }, [fetcher.data, fetcher.state, file]);
@@ -1122,7 +1123,7 @@ async function importReviewsFromCsv(shopDomain: string, csvText: string) {
   const importedAt = new Date();
   const isJudgeMeCsv = fields.includes("reviewer_name") || fields.includes("body") || fields.includes("product_handle");
   const requiredHeaders = isJudgeMeCsv
-    ? ["reviewer_name", "rating", "title", "body"]
+    ? ["reviewer_name", "rating", "body"]
     : ["customerName", "rating", "title", "content"];
   const missingHeaders = requiredHeaders.filter((field) => !fields.includes(field));
 
@@ -1135,12 +1136,33 @@ async function importReviewsFromCsv(shopDomain: string, csvText: string) {
   }
 
   let importedCount = 0;
+  let skippedCount = 0;
 
   for (const [recordIndex, record] of records.entries()) {
     if (record.every((value) => !value.trim())) continue;
     try {
       const row = Object.fromEntries(fields.map((field, index) => [field, record[index] || ""]));
       const importedReview = normalizeImportedReviewRow(row, importedAt, isJudgeMeCsv);
+      const title = requiredString(importedReview.title || fallbackImportedTitle(importedReview.content), "title");
+      const content = requiredString(importedReview.content, "content");
+      const rating = clampRating(importedReview.rating || "5");
+
+      const duplicateReview = await prisma.productReview.findFirst({
+        where: {
+          shopDomain,
+          source: "IMPORTED",
+          customerEmail: importedReview.customerEmail,
+          productHandle: importedReview.productHandle,
+          rating,
+          content
+        },
+        select: { id: true }
+      });
+
+      if (duplicateReview) {
+        skippedCount += 1;
+        continue;
+      }
 
       await prisma.productReview.create({
         data: {
@@ -1150,9 +1172,9 @@ async function importReviewsFromCsv(shopDomain: string, csvText: string) {
           productTitle: importedReview.productTitle,
           customerName: requiredString(importedReview.customerName, "customerName"),
           customerEmail: importedReview.customerEmail,
-          rating: clampRating(importedReview.rating || "5"),
-          title: requiredString(importedReview.title, "title"),
-          content: requiredString(importedReview.content, "content"),
+          rating,
+          title,
+          content,
           status: importedReview.status,
           source: "IMPORTED",
           verifiedPurchase: importedReview.verifiedPurchase,
@@ -1168,7 +1190,7 @@ async function importReviewsFromCsv(shopDomain: string, csvText: string) {
     }
   }
 
-  return importedCount;
+  return { importedCount, skippedCount };
 }
 
 type ImportedCsvRow = Record<string, string>;
@@ -1234,6 +1256,12 @@ function getCsvField(row: ImportedCsvRow, ...names: string[]) {
     }
   }
   return "";
+}
+
+function fallbackImportedTitle(content: string) {
+  const normalizedContent = content.replace(/\s+/g, " ").trim();
+  if (!normalizedContent) return "";
+  return normalizedContent.length > 60 ? `${normalizedContent.slice(0, 57)}...` : normalizedContent;
 }
 
 function normalizeJudgeMeStatus(value: string) {
