@@ -65,9 +65,13 @@ const shopify = shopifyApp({
     afterAuth: async ({ session }) => {
       const existingShop = await prisma.shop.findUnique({
         where: { shopDomain: session.shop },
-        select: { isActive: true }
+        select: { accessToken: true, isActive: true }
       });
-      const installEvent = !existingShop ? "install" : existingShop.isActive === false ? "reinstall" : null;
+      const installEvent = !existingShop
+        ? "install"
+        : existingShop.isActive === false || !existingShop.accessToken
+          ? "reinstall"
+          : null;
 
       await prisma.shop.upsert({
         where: { shopDomain: session.shop },

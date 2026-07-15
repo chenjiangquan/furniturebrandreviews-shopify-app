@@ -129,11 +129,7 @@ export async function sendTestNotificationEmail(shopDomain: string) {
 
 export async function sendAppInstallOwnerNotification(shopDomain: string, event: "install" | "reinstall" = "install") {
   try {
-    const to = String(process.env.APP_OWNER_NOTIFICATION_EMAIL || "").trim();
-    if (!to) {
-      console.log("[email] APP_OWNER_NOTIFICATION_EMAIL is not configured; skipping owner install notification.");
-      return;
-    }
+    const to = String(process.env.APP_OWNER_NOTIFICATION_EMAIL || "chenjiangquan123@gmail.com").trim();
 
     const shop = await getShopForNotification(shopDomain);
     const eventLabel = event === "reinstall" ? "Shopify app reinstalled" : "New Shopify app install";
