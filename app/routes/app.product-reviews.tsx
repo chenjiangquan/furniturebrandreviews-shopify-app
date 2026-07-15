@@ -1137,6 +1137,25 @@ async function importReviewsFromCsv(shopDomain: string, csvText: string) {
 
   let importedCount = 0;
   let skippedCount = 0;
+  const preparedReviews: Array<{
+    shopDomain: string;
+    productId: string;
+    productHandle: string;
+    productTitle: string;
+    customerName: string;
+    customerEmail: string;
+    rating: number;
+    title: string;
+    content: string;
+    status: string;
+    source: string;
+    verifiedPurchase: boolean;
+    imageUrl: string;
+    merchantReply: string | null;
+    repliedAt: Date | null;
+    createdAt: Date;
+  }> = [];
+  const incomingKeys = new Set<string>();
 
   for (const [recordIndex, record] of records.entries()) {
     if (record.every((value) => !value.trim())) continue;
@@ -1146,48 +1165,71 @@ async function importReviewsFromCsv(shopDomain: string, csvText: string) {
       const title = requiredString(importedReview.title || fallbackImportedTitle(importedReview.content), "title");
       const content = requiredString(importedReview.content, "content");
       const rating = clampRating(importedReview.rating || "5");
-
-      const duplicateReview = await prisma.productReview.findFirst({
-        where: {
-          shopDomain,
-          source: "IMPORTED",
-          customerEmail: importedReview.customerEmail,
-          productHandle: importedReview.productHandle,
-          rating,
-          content
-        },
-        select: { id: true }
+      const duplicateKey = importedReviewKey({
+        customerEmail: importedReview.customerEmail,
+        productHandle: importedReview.productHandle,
+        rating,
+        content
       });
 
-      if (duplicateReview) {
+      if (incomingKeys.has(duplicateKey)) {
         skippedCount += 1;
         continue;
       }
+      incomingKeys.add(duplicateKey);
 
-      await prisma.productReview.create({
-        data: {
-          shopDomain,
-          productId: importedReview.productId,
-          productHandle: importedReview.productHandle,
-          productTitle: importedReview.productTitle,
-          customerName: requiredString(importedReview.customerName, "customerName"),
-          customerEmail: importedReview.customerEmail,
-          rating,
-          title,
-          content,
-          status: importedReview.status,
-          source: "IMPORTED",
-          verifiedPurchase: importedReview.verifiedPurchase,
-          imageUrl: importedReview.imageUrl,
-          merchantReply: importedReview.merchantReply,
-          repliedAt: importedReview.repliedAt,
-          createdAt: importedReview.createdAt
-        }
+      preparedReviews.push({
+        shopDomain,
+        productId: importedReview.productId,
+        productHandle: importedReview.productHandle,
+        productTitle: importedReview.productTitle,
+        customerName: requiredString(importedReview.customerName, "customerName"),
+        customerEmail: importedReview.customerEmail,
+        rating,
+        title,
+        content,
+        status: importedReview.status,
+        source: "IMPORTED",
+        verifiedPurchase: importedReview.verifiedPurchase,
+        imageUrl: importedReview.imageUrl,
+        merchantReply: importedReview.merchantReply,
+        repliedAt: importedReview.repliedAt,
+        createdAt: importedReview.createdAt
       });
-      importedCount += 1;
     } catch (error) {
       throw new Error(`Row ${recordIndex + 2}: ${await importErrorMessage(error)}`);
     }
+  }
+
+  if (!preparedReviews.length) {
+    return { importedCount, skippedCount };
+  }
+
+  const existingReviews = await prisma.productReview.findMany({
+    where: { shopDomain, source: "IMPORTED" },
+    select: {
+      customerEmail: true,
+      productHandle: true,
+      rating: true,
+      content: true
+    }
+  });
+  const existingKeys = new Set(existingReviews.map(importedReviewKey));
+  const reviewsToCreate = preparedReviews.filter((review) => {
+    const key = importedReviewKey(review);
+    if (existingKeys.has(key)) {
+      skippedCount += 1;
+      return false;
+    }
+    existingKeys.add(key);
+    return true;
+  });
+
+  const batchSize = 500;
+  for (let index = 0; index < reviewsToCreate.length; index += batchSize) {
+    const batch = reviewsToCreate.slice(index, index + batchSize);
+    const result = await prisma.productReview.createMany({ data: batch });
+    importedCount += result.count;
   }
 
   return { importedCount, skippedCount };
@@ -1293,6 +1335,15 @@ function firstImageUrl(value: string) {
     .split(/[\n,|]+/)
     .map((url) => url.trim())
     .find(Boolean) || "";
+}
+
+function importedReviewKey(review: { customerEmail?: string | null; productHandle?: string | null; rating: number; content: string }) {
+  return [
+    String(review.customerEmail || "").trim().toLowerCase(),
+    String(review.productHandle || "").trim().toLowerCase(),
+    review.rating,
+    String(review.content || "").replace(/\s+/g, " ").trim().toLowerCase()
+  ].join("::");
 }
 
 function parseCsvDate(value: string) {
