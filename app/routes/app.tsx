@@ -2,11 +2,6 @@ import type { LoaderFunctionArgs } from "@remix-run/node";
 import { Link, Outlet, useRouteError } from "@remix-run/react";
 import { NavMenu } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-remix/server";
-import {
-  BlockStack,
-  Card,
-  Text
-} from "@shopify/polaris";
 import { authenticate } from "~/shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -76,30 +71,7 @@ function AdminLiveChatButton() {
 export function ErrorBoundary() {
   const error = useRouteError();
   console.error("Admin route error", error);
-
-  try {
-    return boundary.error(error);
-  } catch (boundaryError) {
-    if (boundaryError instanceof Response) {
-      throw boundaryError;
-    }
-
-    // Fall back to a merchant-friendly message for ordinary route errors, while
-    // still allowing Shopify's special App Bridge responses to keep their headers.
-  }
-
-  return (
-    <div style={{ padding: 24 }}>
-      <Card>
-        <BlockStack gap="300">
-          <Text as="h2" variant="headingMd">Furniture Brand Reviews Dashboard</Text>
-          <Text as="p" tone="subdued">
-            Something went wrong while loading this page. Please refresh and try again.
-          </Text>
-        </BlockStack>
-      </Card>
-    </div>
-  );
+  return boundary.error(error);
 }
 
 export const headers = boundary.headers;
