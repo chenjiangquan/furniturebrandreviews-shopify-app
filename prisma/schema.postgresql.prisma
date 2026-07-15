@@ -24,6 +24,8 @@ model Session {
   locale        String?
   collaborator  Boolean?  @default(false)
   emailVerified Boolean?  @default(false)
+
+  @@map("session")
 }
 
 model Shop {
