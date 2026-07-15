@@ -116,7 +116,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Widgets Settings loader failed; rendering fallback UI", error);
   }
 
-  const themeEditorUrl = `https://${session.shop}/admin/themes/current/editor?context=apps&template=product`;
+  const themeEditorUrl = `https://${session.shop}/admin/themes/current/editor?template=product`;
   const brandSlug = widgetSettings.brandSlug || brandSlugFromProfileUrl(widgetSettings.profileUrl) || "";
   const brandProfileUrl = widgetSettings.profileUrl?.includes("/review/") ? widgetSettings.profileUrl : "";
   const googleSeoInstalled =
@@ -239,7 +239,7 @@ export default function WidgetsSettings() {
     <Page
       fullWidth
       title="Widgets Settings"
-      subtitle="Manage storefront widgets through Theme App Extension blocks and app embeds."
+      subtitle="Manage storefront widgets through Theme App Extension blocks."
     >
       <BlockStack gap="500">
         <WidgetSection title="Product Review Widgets">
