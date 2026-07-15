@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "remix vite:build",
-    "build:vercel": "prisma generate --schema prisma/schema.postgresql.prisma && remix vite:build",
+    "build:vercel": "prisma migrate deploy --schema prisma/schema.postgresql.prisma && prisma generate --schema prisma/schema.postgresql.prisma && remix vite:build",
     "dev": "shopify app dev",
     "dev:localhost": "shopify app dev --config local --use-localhost",
     "db:generate:prod": "prisma generate --schema prisma/schema.postgresql.prisma",
