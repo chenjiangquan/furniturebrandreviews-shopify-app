@@ -260,6 +260,7 @@
 }
 
 .fbr-review-item p {
+  font-weight: 400 !important;
   margin-top: 10px;
   margin-bottom: 0;
 }
@@ -274,6 +275,7 @@
 
 .fbr-review-item > strong {
   display: block;
+  font-weight: 700 !important;
   margin-top: 10px;
 }
 
@@ -338,19 +340,28 @@
 .fbr-photo-summary-arrow {
   align-items: center;
   appearance: none;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.86);
   border: 1px solid #dcdfe4;
   border-radius: 999px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
   cursor: pointer;
   display: inline-flex;
-  font-size: 24px;
-  height: 34px;
+  font-size: 18px;
+  height: 28px;
   justify-content: center;
+  line-height: 1;
+  opacity: 0.72;
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  width: 34px;
+  transition: opacity 140ms ease, background 140ms ease, box-shadow 140ms ease;
+  width: 28px;
+}
+
+.fbr-photo-summary-arrow:hover {
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
+  opacity: 1;
 }
 
 .fbr-photo-summary-prev {
