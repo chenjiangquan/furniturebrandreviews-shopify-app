@@ -20,7 +20,7 @@ import {
   TextField
 } from "@shopify/polaris";
 import prisma from "~/db.server";
-import { clampRating, createProductReview, ensureShop, normalizeLegacyReviewStatuses, requiredString } from "~/models/reviews.server";
+import { clampRating, createProductReview, ensureShop, requiredString } from "~/models/reviews.server";
 import { authenticate } from "~/shopify.server";
 
 type ReviewStatus = "PENDING" | "PUBLISHED" | "REJECTED" | "SPAM" | "ARCHIVED";
@@ -59,7 +59,6 @@ const pageSizeOptions = [20, 25, 30];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  await normalizeLegacyReviewStatuses(session.shop);
   const url = new URL(request.url);
   const tabId = url.searchParams.get("tab") || "all";
   const query = (url.searchParams.get("q") || "").trim();

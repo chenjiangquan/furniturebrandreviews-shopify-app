@@ -17,7 +17,6 @@ import {
 import { CheckIcon, XIcon } from "@shopify/polaris-icons";
 import prisma from "~/db.server";
 import { PRO_PLAN, PRO_PLAN_PRICE } from "~/models/billing-plans";
-import { normalizeLegacyReviewStatuses } from "~/models/reviews.server";
 import { authenticate, isFreeProShop } from "~/shopify.server";
 
 type PlanSource = "FREE" | "BILLING" | "FREE_PARTNER";
@@ -46,7 +45,6 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<Dashboard
   try {
     const { billing, session } = await authenticate.admin(request);
     const shopDomain = session.shop;
-    await normalizeLegacyReviewStatuses(shopDomain);
     const { totalReviews, pendingReviews, approvedReviews } = await getDashboardReviewStats(shopDomain);
     const billingStatus = isFreeProShop(shopDomain)
       ? { plan: "PRO" as const, planSource: "FREE_PARTNER" as const, subscriptionId: "" }

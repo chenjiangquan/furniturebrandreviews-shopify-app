@@ -89,22 +89,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     reviewEmailNotificationsEnabled: true,
     questionEmailNotificationsEnabled: true
   };
-  let installedBlocks = emptyInstalledBlocks;
 
   try {
     if (session.accessToken) {
       await syncShopContactFromShopify(shopDomain, session.accessToken);
     }
-    const [, loadedWidgetSettings, loadedGoogleSeoSettings, loadedInstalledBlocks, loadedShop] = await Promise.all([
+    const [, loadedWidgetSettings, loadedGoogleSeoSettings, loadedShop] = await Promise.all([
       getProductReviewWidgetSettings(shopDomain),
       prisma.widgetSettings.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } }),
       prisma.googleSeoSettings.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } }),
-      detectInstalledThemeBlocks(session.shop, session.accessToken),
       prisma.shop.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } })
     ]);
     widgetSettings = loadedWidgetSettings;
     googleSeoSettings = loadedGoogleSeoSettings;
-    installedBlocks = loadedInstalledBlocks;
     shop = {
       notificationEmail: loadedShop.notificationEmail || "",
       storeEmail: loadedShop.storeEmail || "",
@@ -125,7 +122,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     googleSeoSettings.googleShoppingEnabled;
 
   return {
-    installedBlocks,
     googleSeoInstalled,
     themeEditorUrl,
     brandProfile: {
@@ -469,122 +465,4 @@ function slugifyBrandName(value: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
-}
-
-type InstalledThemeBlocks = {
-  reviewWidget: boolean;
-  starRating: boolean;
-  brandCarousel: boolean;
-  brandMicro: boolean;
-};
-
-const emptyInstalledBlocks: InstalledThemeBlocks = {
-  reviewWidget: false,
-  starRating: false,
-  brandCarousel: false,
-  brandMicro: false
-};
-
-async function detectInstalledThemeBlocks(shop: string, accessToken?: string | null): Promise<InstalledThemeBlocks> {
-  if (!accessToken) return emptyInstalledBlocks;
-
-  try {
-    const headers = {
-      "X-Shopify-Access-Token": accessToken,
-      "Content-Type": "application/json"
-    };
-    const themesResponse = await fetch(`https://${shop}/admin/api/2025-04/themes.json`, { headers });
-    if (!themesResponse.ok) return emptyInstalledBlocks;
-    const themesJson = await themesResponse.json() as { themes?: Array<{ id: number; role: string }> };
-    const liveTheme = themesJson.themes?.find((theme) => theme.role === "main");
-    if (!liveTheme) return emptyInstalledBlocks;
-
-    const assetsResponse = await fetch(`https://${shop}/admin/api/2025-04/themes/${liveTheme.id}/assets.json`, { headers });
-    if (!assetsResponse.ok) return emptyInstalledBlocks;
-    const assetsJson = await assetsResponse.json() as { assets?: Array<{ key: string }> };
-    const jsonAssetKeys = (assetsJson.assets || [])
-      .map((asset) => asset.key)
-      .filter((key) => (key.startsWith("templates/") || key.startsWith("sections/")) && key.endsWith(".json"));
-
-    const assetContents = await Promise.all(jsonAssetKeys.map(async (key) => {
-      const assetUrl = new URL(`https://${shop}/admin/api/2025-04/themes/${liveTheme.id}/assets.json`);
-      assetUrl.searchParams.set("asset[key]", key);
-      const response = await fetch(assetUrl, { headers });
-      if (!response.ok) return "";
-      const json = await response.json() as { asset?: { value?: string } };
-      return json.asset?.value || "";
-    }));
-    const normalizedThemeJson = assetContents.join("\n").toLowerCase();
-    const appBlockTypes = assetContents.flatMap(extractThemeBlockTypes);
-
-    return {
-      reviewWidget: hasAnyAppBlock(appBlockTypes, normalizedThemeJson, [
-        "product-reviews-widget",
-        "product_reviews_widget",
-        "review-widget",
-        "review_widget"
-      ]),
-      starRating: hasAnyAppBlock(appBlockTypes, normalizedThemeJson, [
-        "product-star-rating",
-        "product_star_rating",
-        "star-rating",
-        "star_rating"
-      ]),
-      brandCarousel: hasAnyAppBlock(appBlockTypes, normalizedThemeJson, [
-        "fbr-brand-review-carousel",
-        "fbr_brand_review_carousel",
-        "brand-review-carousel",
-        "brand_review_carousel",
-        "fbr-carousel",
-        "fbr_carousel"
-      ]),
-      brandMicro: hasAnyAppBlock(appBlockTypes, normalizedThemeJson, [
-        "fbr-brand-micro-trust-badge",
-        "fbr_brand_micro_trust_badge",
-        "brand-micro-trust-badge",
-        "brand_micro_trust_badge",
-        "fbr-micro-badge",
-        "fbr_micro_badge"
-      ])
-    };
-  } catch (error) {
-    console.warn("Unable to detect installed theme app blocks", error);
-    return emptyInstalledBlocks;
-  }
-}
-
-function extractThemeBlockTypes(value: string) {
-  if (!value) return [];
-
-  try {
-    const parsed = JSON.parse(value);
-    const types: string[] = [];
-    const visit = (node: unknown) => {
-      if (!node || typeof node !== "object") return;
-      if (Array.isArray(node)) {
-        node.forEach(visit);
-        return;
-      }
-      const record = node as Record<string, unknown>;
-      if (typeof record.type === "string" && record.type.includes("shopify://apps/")) {
-        types.push(record.type.toLowerCase());
-      }
-      Object.values(record).forEach(visit);
-    };
-    visit(parsed);
-    return types;
-  } catch {
-    return [];
-  }
-}
-
-function hasAnyAppBlock(types: string[], normalizedThemeJson: string, blockHandles: string[]) {
-  return blockHandles.some((blockHandle) => {
-    const normalizedHandle = blockHandle.toLowerCase();
-    const appBlockNeedle = `/blocks/${normalizedHandle}/`;
-    return (
-      types.some((type) => type.includes(appBlockNeedle) || type.includes(normalizedHandle)) ||
-      normalizedThemeJson.includes(normalizedHandle)
-    );
-  });
 }

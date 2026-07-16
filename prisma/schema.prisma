@@ -135,6 +135,10 @@ model ProductReview {
 
   @@index([shopDomain, productId])
   @@index([shopDomain, status])
+  @@index([shopDomain, createdAt])
+  @@index([shopDomain, status, createdAt])
+  @@index([shopDomain, productHandle, status])
+  @@index([shopDomain, productTitle, status])
 }
 
 model ProductQuestion {
@@ -156,6 +160,10 @@ model ProductQuestion {
 
   @@index([shopDomain, productId])
   @@index([shopDomain, status])
+  @@index([shopDomain, createdAt])
+  @@index([shopDomain, status, createdAt])
+  @@index([shopDomain, productHandle, status])
+  @@index([shopDomain, productTitle, status])
 }
 
 model ProductReviewSettings {
