@@ -1171,9 +1171,9 @@
 
   }
 
+  initFbrWidgets();
+
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initFbrWidgets);
-  } else {
-    initFbrWidgets();
+    document.addEventListener("DOMContentLoaded", initFbrWidgets, { once: true });
   }
 })();
