@@ -1,0 +1,1 @@
+ALTER TABLE "ProductReview" ADD COLUMN IF NOT EXISTS "imageHidden" BOOLEAN NOT NULL DEFAULT false;

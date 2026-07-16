@@ -79,6 +79,76 @@ export function normalizeProductTitle(value: string | null | undefined) {
     .trim();
 }
 
+const genericProductWords = new Set([
+  "and",
+  "the",
+  "with",
+  "for",
+  "from",
+  "product"
+]);
+
+function productMatchTokens(...values: Array<string | null | undefined>) {
+  const tokens = new Set<string>();
+  for (const value of values) {
+    for (const token of normalizeProductTitle(value).split(" ")) {
+      if (token.length >= 4 && !genericProductWords.has(token)) {
+        tokens.add(token);
+      }
+    }
+  }
+  return [...tokens];
+}
+
+function productCandidateWhere(productHandle: string, productTitle: string): Prisma.ProductReviewWhereInput {
+  const tokens = productMatchTokens(productHandle, productTitle);
+  if (!tokens.length) {
+    return {
+      OR: [
+        { productTitle: { not: "" } },
+        { productHandle: { not: "" } }
+      ]
+    };
+  }
+
+  return {
+    AND: tokens.map((token) => ({
+      OR: [
+        { productTitle: { contains: token, mode: "insensitive" } },
+        { productHandle: { contains: token, mode: "insensitive" } }
+      ]
+    }))
+  };
+}
+
+function reviewMatchesCurrentProduct(
+  review: Pick<ProductReview, "productTitle" | "productHandle">,
+  normalizedCurrentTitle: string,
+  currentTokens: string[]
+) {
+  const normalizedReviewTitle = normalizeProductTitle(review.productTitle);
+  const normalizedReviewHandle = normalizeProductTitle(review.productHandle);
+  const haystacks = [normalizedReviewTitle, normalizedReviewHandle].filter(Boolean);
+
+  if (
+    normalizedCurrentTitle &&
+    haystacks.some((haystack) =>
+      haystack === normalizedCurrentTitle ||
+      haystack.includes(normalizedCurrentTitle) ||
+      normalizedCurrentTitle.includes(haystack)
+    )
+  ) {
+    return true;
+  }
+
+  if (!currentTokens.length) {
+    return false;
+  }
+
+  const reviewTokens = new Set(haystacks.flatMap((value) => value.split(" ")));
+  return currentTokens.every((token) => reviewTokens.has(token));
+}
+
 export function clampRating(value: FormDataEntryValue | string | null) {
   const rating = Number(value);
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
@@ -102,6 +172,7 @@ export async function getProductReviewSummary(
   productTitle = ""
 ) {
   const normalizedCurrentTitle = normalizeProductTitle(productTitle);
+  const currentTokens = productMatchTokens(productHandle, productTitle);
   const reviewMatchFilters: Prisma.ProductReviewWhereInput[] = [];
   const questionMatchFilters: Prisma.ProductQuestionWhereInput[] = [];
 
@@ -127,12 +198,12 @@ export async function getProductReviewSummary(
       },
       orderBy: { createdAt: "desc" }
     }),
-    normalizedCurrentTitle
+    normalizedCurrentTitle || currentTokens.length > 0
       ? prisma.productReview.findMany({
           where: {
             shopDomain,
             status: { in: publishedReviewStatuses },
-            productTitle: { not: "" }
+            ...productCandidateWhere(productHandle, productTitle)
           },
           orderBy: { createdAt: "desc" },
           take: 2500
@@ -153,14 +224,7 @@ export async function getProductReviewSummary(
     reviewMap.set(review.id, review);
   }
   for (const review of titleFallbackReviews) {
-    const normalizedReviewTitle = normalizeProductTitle(review.productTitle);
-    if (
-      normalizedCurrentTitle &&
-      normalizedReviewTitle &&
-      (normalizedReviewTitle === normalizedCurrentTitle ||
-        normalizedReviewTitle.includes(normalizedCurrentTitle) ||
-        normalizedCurrentTitle.includes(normalizedReviewTitle))
-    ) {
+    if (reviewMatchesCurrentProduct(review, normalizedCurrentTitle, currentTokens)) {
       reviewMap.set(review.id, review);
     }
   }
@@ -171,8 +235,76 @@ export async function getProductReviewSummary(
   return {
     averageRating: Number((reviews.length ? ratingTotal / reviews.length : 0).toFixed(1)),
     reviewCount: reviews.length,
-    reviews,
+    reviews: reviews.map(publicProductReview),
     questions
+  };
+}
+
+export async function getProductReviewRatingSummary(
+  shopDomain: string,
+  productId: string,
+  productHandle = "",
+  productTitle = ""
+) {
+  const normalizedCurrentTitle = normalizeProductTitle(productTitle);
+  const currentTokens = productMatchTokens(productHandle, productTitle);
+  const reviewMatchFilters: Prisma.ProductReviewWhereInput[] = [];
+
+  if (productId) {
+    reviewMatchFilters.push({ productId });
+  }
+  if (productHandle) {
+    reviewMatchFilters.push({ productHandle });
+  }
+  if (productTitle) {
+    reviewMatchFilters.push({ productTitle });
+  }
+
+  const [directPublishedReviews, titleFallbackReviews] = await Promise.all([
+    prisma.productReview.findMany({
+      where: {
+        shopDomain,
+        status: { in: publishedReviewStatuses },
+        ...(reviewMatchFilters.length ? { OR: reviewMatchFilters } : { id: "__no_product_match__" })
+      },
+      select: { id: true, rating: true, productTitle: true, productHandle: true }
+    }),
+    normalizedCurrentTitle || currentTokens.length > 0
+      ? prisma.productReview.findMany({
+          where: {
+            shopDomain,
+            status: { in: publishedReviewStatuses },
+            ...productCandidateWhere(productHandle, productTitle)
+          },
+          select: { id: true, rating: true, productTitle: true, productHandle: true },
+          take: 2500
+        })
+      : Promise.resolve([])
+  ]);
+
+  const reviewMap = new Map<string, { id: string; rating: number; productTitle: string | null; productHandle: string | null }>();
+  for (const review of directPublishedReviews) {
+    reviewMap.set(review.id, review);
+  }
+  for (const review of titleFallbackReviews) {
+    if (reviewMatchesCurrentProduct(review, normalizedCurrentTitle, currentTokens)) {
+      reviewMap.set(review.id, review);
+    }
+  }
+
+  const reviews = [...reviewMap.values()];
+  const ratingTotal = reviews.reduce((total, review) => total + review.rating, 0);
+
+  return {
+    averageRating: Number((reviews.length ? ratingTotal / reviews.length : 0).toFixed(1)),
+    reviewCount: reviews.length
+  };
+}
+
+function publicProductReview(review: ProductReview) {
+  return {
+    ...review,
+    imageUrl: review.imageHidden ? "" : review.imageUrl
   };
 }
 

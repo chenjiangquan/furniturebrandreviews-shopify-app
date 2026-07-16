@@ -5,6 +5,7 @@ import {
   clampRating,
   corsJson,
   createProductReview,
+  getProductReviewRatingSummary,
   getProductReviewWidgetSettings,
   getProductReviewSummary,
   requiredString
@@ -18,6 +19,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const productTitle = String(url.searchParams.get("productTitle") || "").trim();
   if (!productId && !productHandle && !productTitle) {
     throw new Response("productId, productHandle, or productTitle is required.", { status: 400 });
+  }
+  if (url.searchParams.get("summaryOnly") === "1") {
+    const summary = await getProductReviewRatingSummary(shop, productId, productHandle, productTitle);
+    return corsJson(summary, {
+      headers: {
+        "Cache-Control": "public, max-age=60, stale-while-revalidate=300"
+      }
+    });
   }
   const [summary, settings] = await Promise.all([
     getProductReviewSummary(shop, productId, productHandle, productTitle),

@@ -72,17 +72,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const view = url.searchParams.get("view") === "questions" ? "questions" : "reviews";
   const tab = tabs.find((item) => item.id === tabId) || tabs[0];
   const status = url.searchParams.get("status") || tab.status;
+  const containsSearch = (value: string) => ({ contains: value, mode: "insensitive" }) as const;
   const andFilters = [
-    ...(picture === "with" ? [{ imageUrl: { not: null } }, { imageUrl: { not: "" } }] : []),
-    ...(picture === "without" ? [{ OR: [{ imageUrl: null }, { imageUrl: "" }] }] : []),
+    ...(picture === "with" ? [{ imageHidden: false }, { imageUrl: { not: null } }, { imageUrl: { not: "" } }] : []),
+    ...(picture === "without" ? [{ OR: [{ imageHidden: true }, { imageUrl: null }, { imageUrl: "" }] }] : []),
     ...(query
       ? [{
           OR: [
-            { productTitle: { contains: query } },
-            { productHandle: { contains: query } },
-            { customerName: { contains: query } },
-            { title: { contains: query } },
-            { content: { contains: query } }
+            { productTitle: containsSearch(query) },
+            { productHandle: containsSearch(query) },
+            { customerName: containsSearch(query) },
+            { title: containsSearch(query) },
+            { content: containsSearch(query) }
           ]
         }]
       : [])
@@ -98,11 +99,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ...(query
       ? {
           OR: [
-            { productTitle: { contains: query } },
-            { productHandle: { contains: query } },
-            { customerName: { contains: query } },
-            { question: { contains: query } },
-            { answer: { contains: query } }
+            { productTitle: containsSearch(query) },
+            { productHandle: containsSearch(query) },
+            { customerName: containsSearch(query) },
+            { question: containsSearch(query) },
+            { answer: containsSearch(query) }
           ]
         }
       : {})
@@ -161,6 +162,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await prisma.productReview.update({
       where: { id },
       data: { verifiedPurchase: form.get("verifiedPurchase") === "on" }
+    });
+  }
+
+  if (intent === "imageHidden") {
+    await prisma.productReview.updateMany({
+      where: { id, shopDomain: session.shop },
+      data: { imageHidden: form.get("imageHidden") === "on" }
     });
   }
 
@@ -259,7 +267,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
-  if (["status", "verifiedPurchase", "reply", "delete", "importCsv", "autoPublish", "questionStatus", "questionAnswer", "questionDelete"].includes(intent)) {
+  if (["status", "verifiedPurchase", "imageHidden", "reply", "delete", "importCsv", "autoPublish", "questionStatus", "questionAnswer", "questionDelete"].includes(intent)) {
     return { ok: true };
   }
 
@@ -267,7 +275,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function ProductReviews() {
-  const { reviews, questions, autoApproveReviews, page, totalPages, perPage } = useLoaderData<typeof loader>();
+  const { reviews, questions, autoApproveReviews, page, totalPages, perPage, reviewCount } = useLoaderData<typeof loader>();
   const [params, setParams] = useSearchParams();
   const navigation = useNavigation();
   const selectedView = params.get("view") === "questions" ? "questions" : "reviews";
@@ -366,6 +374,11 @@ export default function ProductReviews() {
               )}
             </div>
             <InlineStack gap="200" blockAlign="center" wrap={false}>
+              {selectedView === "reviews" ? (
+                <Text as="p" tone="subdued">
+                  {reviewCount} {reviewCount === 1 ? "result" : "results"}
+                </Text>
+              ) : null}
               <div style={{ width: 320, maxWidth: "calc(100vw - 160px)" }}>
                 <TextField
                   label="Search reviews"
@@ -493,6 +506,9 @@ function ReviewRow({ review, busy }: { review: any; busy: boolean }) {
                   }}
                 />
               </button>
+              {review.imageHidden ? (
+                <Text as="p" tone="subdued">Image hidden on storefront</Text>
+              ) : null}
               <Modal
                 open={imagePreviewOpen}
                 onClose={() => setImagePreviewOpen(false)}
@@ -536,6 +552,7 @@ function ReviewRow({ review, busy }: { review: any; busy: boolean }) {
         </fetcher.Form>
         <ReplyModal review={review} open={replyOpen} onClose={() => setReplyOpen(false)} />
         <VerifiedPurchaseControl review={review} />
+        {review.imageUrl ? <HideReviewImageControl review={review} /> : null}
         <InlineStack gap="200">
           <Button size="micro" onClick={() => setReplyOpen(true)}>{review.merchantReply ? "Edit reply" : "Reply"}</Button>
           <Button size="micro" tone="critical" disabled={busy} onClick={() => submitIntent("delete")}>Delete</Button>
@@ -1033,6 +1050,30 @@ function VerifiedPurchaseControl({ review }: { review: any }) {
         formData.set("intent", "verifiedPurchase");
         formData.set("id", review.id);
         if (nextChecked) formData.set("verifiedPurchase", "on");
+        fetcher.submit(formData, { method: "post" });
+      }}
+    />
+  );
+}
+
+function HideReviewImageControl({ review }: { review: any }) {
+  const fetcher = useFetcher();
+  const [checked, setChecked] = React.useState(Boolean(review.imageHidden));
+
+  React.useEffect(() => {
+    setChecked(Boolean(review.imageHidden));
+  }, [review.imageHidden]);
+
+  return (
+    <Checkbox
+      label="Hide image on storefront"
+      checked={checked}
+      onChange={(nextChecked) => {
+        setChecked(nextChecked);
+        const formData = new FormData();
+        formData.set("intent", "imageHidden");
+        formData.set("id", review.id);
+        if (nextChecked) formData.set("imageHidden", "on");
         fetcher.submit(formData, { method: "post" });
       }}
     />

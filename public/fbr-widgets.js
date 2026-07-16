@@ -10,6 +10,9 @@
   const apiBase = (el) => (el.dataset.apiBase || "/apps/fbr").replace(/\/$/, "");
   const shop = (el) => el.dataset.shop;
   const productReviewUrl = (el) => `${apiBase(el)}/api/product-reviews?shop=${encodeURIComponent(shop(el))}&productId=${encodeURIComponent(el.dataset.productId || "")}&productHandle=${encodeURIComponent(el.dataset.productHandle || "")}&productTitle=${encodeURIComponent(el.dataset.productTitle || "")}`;
+  const productReviewSummaryUrl = (el) => `${productReviewUrl(el)}&summaryOnly=1`;
+  const fetchCache = new Map();
+  const fetchCacheTtl = 60000;
   const defaultProductSettings = {
     productReviewsEnabled: true,
     productReviewWidgetEnabled: true,
@@ -61,7 +64,15 @@
     sortDefault: "newest"
   };
 
-  async function fetchJson(url, options) {
+  async function fetchJson(url, options = {}) {
+    const method = String(options.method || "GET").toUpperCase();
+    const cacheable = method === "GET" && !options.body;
+    const now = Date.now();
+    if (cacheable) {
+      const cached = fetchCache.get(url);
+      if (cached && cached.expires > now) return cached.data;
+      if (cached) fetchCache.delete(url);
+    }
     const response = await fetch(url, options);
     const text = await response.text();
     let data = {};
@@ -73,6 +84,7 @@
     if (!response.ok || data.ok === false) {
       throw new Error(data.error || data.message || "Request failed");
     }
+    if (cacheable) fetchCache.set(url, { data, expires: now + fetchCacheTtl });
     return data;
   }
 
@@ -172,7 +184,7 @@
       ratingEl.setAttribute("aria-label", "Product rating");
       titleTarget.insertAdjacentElement("afterend", ratingEl);
 
-      fetchJson(`${options.apiBase}/api/product-reviews?shop=${encodeURIComponent(options.shop)}&productHandle=${encodeURIComponent(handle)}&productTitle=${encodeURIComponent(productTitleFromLink(link))}`)
+      fetchJson(`${options.apiBase}/api/product-reviews?shop=${encodeURIComponent(options.shop)}&productHandle=${encodeURIComponent(handle)}&productTitle=${encodeURIComponent(productTitleFromLink(link))}&summaryOnly=1`)
         .then((data) => renderCollectionProductStars(ratingEl, data, options))
         .catch((error) => {
           console.error("[fbr] Collection product stars failed", { handle, error });
@@ -232,16 +244,17 @@
     const reviewsPerPage = Math.max(1, Number(settings.reviewsPerPage) || 5);
     const currentReviewPage = Math.max(1, Number(settings.storefrontReviewPage) || 1);
     const photoSummaryLimit = Math.max(4, Math.min(20, Number(settings.photoSummaryLimit) || 8));
+    const publicReviews = (data.reviews || []).map((review) => review && review.imageHidden ? { ...review, imageUrl: "" } : review);
     const reviewPhotos = settings.showPhotoSummary
-      ? (data.reviews || []).filter((review) => Boolean(review.imageUrl))
+      ? publicReviews.filter((review) => Boolean(review.imageUrl))
       : [];
-    const allSortedReviews = sortReviews(data.reviews || [], selectedFilter, selectedRatings);
+    const allSortedReviews = sortReviews(publicReviews, selectedFilter, selectedRatings);
     const reviewTotalPages = Math.max(1, Math.ceil(allSortedReviews.length / reviewsPerPage));
     const reviewPage = Math.min(currentReviewPage, reviewTotalPages);
     const reviews = allSortedReviews.slice((reviewPage - 1) * reviewsPerPage, reviewPage * reviewsPerPage);
     const questions = data.questions || [];
-    const hasApprovedReviews = (data.reviews || []).length > 0;
-    const breakdown = buildRatingBreakdown(data.reviews || []);
+    const hasApprovedReviews = publicReviews.length > 0;
+    const breakdown = buildRatingBreakdown(publicReviews);
     const totalBreakdown = Math.max(Object.values(breakdown).reduce((total, count) => total + Number(count || 0), 0), 1);
     const layoutType = ["standard", "cards", "carousel"].includes(settings.layoutType) ? settings.layoutType : "standard";
     const layoutClass = `fbr-layout-${layoutType}`;
@@ -1067,7 +1080,7 @@
       if (el.dataset.fbrRendered === "true") return;
       el.dataset.fbrRendered = "true";
       try {
-        const data = await fetchJson(productReviewUrl(el));
+        const data = await fetchJson(productReviewSummaryUrl(el));
         renderProductStars(el, data);
       } catch (error) {
         console.error("[fbr] Product Star Rating failed", error);

@@ -123,6 +123,7 @@ model ProductReview {
   title            String
   content          String
   imageUrl         String?
+  imageHidden      Boolean             @default(false)
   usefulCount      Int                 @default(0)
   source           String              @default("STOREFRONT")
   merchantReply    String?
