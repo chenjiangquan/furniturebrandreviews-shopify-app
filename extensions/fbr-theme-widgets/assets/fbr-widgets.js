@@ -13,6 +13,8 @@
   const productReviewSummaryUrl = (el) => `${productReviewUrl(el)}&summaryOnly=1`;
   const fetchCache = new Map();
   const fetchCacheTtl = 60000;
+  const persistentCacheTtl = 60000;
+  const persistentCachePrefix = "fbr_cache_v2:";
   const defaultProductSettings = {
     productReviewsEnabled: true,
     productReviewWidgetEnabled: true,
@@ -86,6 +88,38 @@
     }
     if (cacheable) fetchCache.set(url, { data, expires: now + fetchCacheTtl });
     return data;
+  }
+
+  function persistentCacheKey(url) {
+    return `${persistentCachePrefix}${url}`;
+  }
+
+  function readPersistentCache(url) {
+    try {
+      if (!window.localStorage) return null;
+      const raw = window.localStorage.getItem(persistentCacheKey(url));
+      if (!raw) return null;
+      const cached = JSON.parse(raw);
+      if (!cached || cached.expires <= Date.now()) {
+        window.localStorage.removeItem(persistentCacheKey(url));
+        return null;
+      }
+      return cached.data || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function writePersistentCache(url, data) {
+    try {
+      if (!window.localStorage) return;
+      window.localStorage.setItem(persistentCacheKey(url), JSON.stringify({
+        data,
+        expires: Date.now() + persistentCacheTtl
+      }));
+    } catch {
+      // Ignore storage limits or private browsing restrictions.
+    }
   }
 
   function settingsFromReviewData(data, fallbackSettings) {
@@ -271,7 +305,7 @@
     el.style.width = "100%";
     el.style.maxWidth = "none";
     el.innerHTML = `
-      <div class="fbr-product-reviews-card ${layoutClass}" style="--fbr-widget-border-width:${widgetBorderWidth}px; --fbr-widget-border-color:${escapeAttr(settings.borderColor)}; --fbr-widget-border-radius:${widgetBorderRadius}px; --fbr-widget-background:${escapeAttr(settings.widgetBackgroundColor)}; background:${escapeAttr(settings.widgetBackgroundColor)}; border:${widgetBorderWidth}px solid ${escapeAttr(settings.borderColor)}; border-radius:${widgetBorderRadius}px;">
+      <div class="fbr-product-reviews-card ${layoutClass}" style="--fbr-widget-border-width:${widgetBorderWidth}px; --fbr-widget-border-color:${escapeAttr(settings.borderColor)}; --fbr-widget-border-radius:${widgetBorderRadius}px; --fbr-widget-background:${escapeAttr(settings.widgetBackgroundColor)}; background:${escapeAttr(settings.widgetBackgroundColor)} !important; border:${widgetBorderWidth}px solid ${escapeAttr(settings.borderColor)} !important; border-radius:${widgetBorderRadius}px !important;">
         <div class="fbr-product-review-header">
           <div class="fbr-review-title-row">
             <h3>Customer Reviews</h3>
@@ -1079,25 +1113,45 @@
     document.querySelectorAll("[data-fbr-product-stars]").forEach(async (el) => {
       if (el.dataset.fbrRendered === "true") return;
       el.dataset.fbrRendered = "true";
+      const url = productReviewSummaryUrl(el);
+      let renderedFromCache = false;
+      const cached = readPersistentCache(url);
+      if (cached) {
+        renderProductStars(el, cached);
+        renderedFromCache = true;
+      }
       try {
-        const data = await fetchJson(productReviewSummaryUrl(el));
+        const data = await fetchJson(url);
+        writePersistentCache(url, data);
         renderProductStars(el, data);
       } catch (error) {
         console.error("[fbr] Product Star Rating failed", error);
-        renderProductStars(el, { averageRating: 0, reviewCount: 0 });
+        if (!renderedFromCache) {
+          renderProductStars(el, { averageRating: 0, reviewCount: 0 });
+        }
       }
     });
 
     document.querySelectorAll("[data-fbr-product-reviews]").forEach(async (el) => {
       if (el.dataset.fbrRendered === "true") return;
       el.dataset.fbrRendered = "true";
+      const url = productReviewUrl(el);
+      let renderedFromCache = false;
+      const cached = readPersistentCache(url);
+      if (cached) {
+        renderProductReviews(el, cached, settingsFromReviewData(cached, cached.widgetSettings || defaultProductSettings));
+        renderedFromCache = true;
+      }
       try {
-        const data = await fetchJson(productReviewUrl(el));
-        const settings = data.widgetSettings || await fetchJson(`${apiBase(el)}/api/product-review-widget-settings?shop=${encodeURIComponent(shop(el))}&_=${Date.now()}`).catch(() => defaultProductSettings);
+        const data = await fetchJson(url);
+        writePersistentCache(url, data);
+        const settings = data.widgetSettings || await fetchJson(`${apiBase(el)}/api/product-review-widget-settings?shop=${encodeURIComponent(shop(el))}`).catch(() => defaultProductSettings);
         renderProductReviews(el, data, settingsFromReviewData(data, settings));
       } catch (error) {
         console.error("[fbr] Product Reviews Widget failed", error);
-        renderProductReviews(el, { averageRating: 0, reviewCount: 0, reviews: [], questions: [] }, defaultProductSettings);
+        if (!renderedFromCache) {
+          renderProductReviews(el, { averageRating: 0, reviewCount: 0, reviews: [], questions: [] }, defaultProductSettings);
+        }
       }
     });
 

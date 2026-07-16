@@ -100,8 +100,7 @@ const textFields = [
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const settings = await getProductReviewWidgetSettings(session.shop);
-  const themeEditorUrl = `https://${session.shop}/admin/themes/current/editor?template=product`;
-  return { settings, themeEditorUrl };
+  return { settings };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -187,7 +186,7 @@ function sliderNumber(value: number | [number, number]) {
 }
 
 export default function ProductReviewWidgetSettings() {
-  const { settings, themeEditorUrl } = useLoaderData<typeof loader>();
+  const { settings } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [draft, setDraft] = React.useState<WidgetSettings>(normalizeWidgetSettings({
     ...defaultProductReviewWidgetSettings,
@@ -243,20 +242,6 @@ export default function ProductReviewWidgetSettings() {
                 <Text as="p" tone="critical">{fetcher.data.error}</Text>
               </Card>
             ) : null}
-            <Card>
-              <BlockStack gap="300">
-                <Text as="h2" variant="headingMd">Install / Enable Widget</Text>
-                <Checkbox
-                  label="Enable Product Review Widget"
-                  checked={draft.productReviewWidgetEnabled}
-                  onChange={(checked) => setValue("productReviewWidgetEnabled", checked)}
-                />
-                <Text as="p" tone="subdued">
-                  When enabled, merchants can add this widget from: Online Store → Customize → Product template → Add block → Product Reviews Widget.
-                </Text>
-                <Button url={themeEditorUrl} target="_blank">Open Theme Editor</Button>
-              </BlockStack>
-            </Card>
 
             <Card>
               <BlockStack gap="300">

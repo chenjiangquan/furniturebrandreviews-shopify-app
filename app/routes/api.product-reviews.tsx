@@ -35,7 +35,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { id, shopDomain, createdAt, updatedAt, ...widgetSettings } = settings;
   return corsJson({ ...summary, widgetSettings }, {
     headers: {
-      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"
+      "Cache-Control": "public, max-age=30, stale-while-revalidate=300"
     }
   });
 };
