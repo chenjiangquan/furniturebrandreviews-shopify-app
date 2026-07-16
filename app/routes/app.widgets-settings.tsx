@@ -76,6 +76,8 @@ const defaultBrandProfile = {
   brandProfileUrl: ""
 };
 
+const WHATSAPP_SUPPORT_URL = "https://wa.me/447521530350";
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
@@ -516,6 +518,14 @@ function ManualInstallModal({
               Manual code renders directly where it is pasted. It will not show as a Theme Editor app block.
             </Text>
           ) : null}
+          <InlineStack align="space-between" blockAlign="center" gap="300">
+            <Text as="p" tone="subdued">
+              Need help installing this widget?
+            </Text>
+            <Button url={WHATSAPP_SUPPORT_URL} target="_blank">
+              Need help?
+            </Button>
+          </InlineStack>
         </BlockStack>
       </Modal.Section>
     </Modal>
