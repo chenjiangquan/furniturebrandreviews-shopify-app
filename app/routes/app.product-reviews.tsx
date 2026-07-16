@@ -285,17 +285,36 @@ export default function ProductReviews() {
   const [showAddReview, setShowAddReview] = React.useState(false);
   const [importOpen, setImportOpen] = React.useState(false);
   const [searchValue, setSearchValue] = React.useState(params.get("q") || "");
+  const searchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   React.useEffect(() => {
     setSearchValue(params.get("q") || "");
   }, [params]);
 
+  React.useEffect(() => {
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, []);
+
   const applySearch = React.useCallback((value: string) => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     const next = new URLSearchParams(params);
     if (value.trim()) next.set("q", value.trim());
     else next.delete("q");
     next.set("page", "1");
     setParams(next);
+  }, [params, setParams]);
+
+  const scheduleSearch = React.useCallback((value: string) => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      const next = new URLSearchParams(params);
+      if (value.trim()) next.set("q", value.trim());
+      else next.delete("q");
+      next.set("page", "1");
+      setParams(next);
+    }, 300);
   }, [params, setParams]);
 
   const exportReviews = React.useCallback(() => {
@@ -387,7 +406,7 @@ export default function ProductReviews() {
                   value={searchValue}
                   onChange={(value) => {
                     setSearchValue(value);
-                    applySearch(value);
+                    scheduleSearch(value);
                   }}
                   clearButton
                   onClearButtonClick={() => {
@@ -797,8 +816,9 @@ function AutoPublishToggle({ enabled }: { enabled: boolean }) {
 
 function ReviewFilterPopover() {
   const [params, setParams] = useSearchParams();
+  const navigation = useNavigation();
   const [active, setActive] = React.useState(false);
-  const selected =
+  const urlSelected =
     params.get("sort") === "most_recent"
       ? "most_recent"
       : params.get("picture") === "with"
@@ -806,6 +826,13 @@ function ReviewFilterPopover() {
       : params.get("picture") === "without"
         ? "without_picture"
         : params.get("rating") || "all";
+  const [selected, setSelected] = React.useState(urlSelected);
+  const isFiltering = navigation.state !== "idle" && navigation.location?.pathname.includes("/app/product-reviews");
+
+  React.useEffect(() => {
+    setSelected(urlSelected);
+  }, [urlSelected]);
+
   const label =
     selected === "with_picture"
       ? "With Picture"
@@ -820,7 +847,7 @@ function ReviewFilterPopover() {
   return (
     <Popover
       active={active}
-      activator={<Button disclosure onClick={() => setActive((open) => !open)}>{label}</Button>}
+      activator={<Button disclosure loading={isFiltering} onClick={() => setActive((open) => !open)}>{label}</Button>}
       onClose={() => setActive(false)}
     >
       <Popover.Section>
@@ -840,6 +867,8 @@ function ReviewFilterPopover() {
             { label: "Without Picture", value: "without_picture" }
           ]}
           onChange={([value]) => {
+            setSelected(value);
+            setActive(false);
             const next = new URLSearchParams(params);
             next.delete("rating");
             next.delete("picture");
@@ -850,7 +879,6 @@ function ReviewFilterPopover() {
             else if (value === "without_picture") next.set("picture", "without");
             else if (value && value !== "all") next.set("rating", value);
             setParams(next);
-            setActive(false);
           }}
         />
       </Popover.Section>

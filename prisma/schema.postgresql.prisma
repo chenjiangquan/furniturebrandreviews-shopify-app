@@ -141,6 +141,8 @@ model ProductReview {
   @@index([shopDomain, status, createdAt])
   @@index([shopDomain, productHandle, status])
   @@index([shopDomain, productTitle, status])
+  @@index([shopDomain, rating, createdAt])
+  @@index([shopDomain, imageHidden, createdAt])
 }
 
 model ProductQuestion {
