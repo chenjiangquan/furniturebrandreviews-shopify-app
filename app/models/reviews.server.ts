@@ -102,31 +102,70 @@ export async function getProductReviewSummary(
   productTitle = ""
 ) {
   const normalizedCurrentTitle = normalizeProductTitle(productTitle);
-  const [allPublishedReviews, questions] = await Promise.all([
+  const reviewMatchFilters: Prisma.ProductReviewWhereInput[] = [];
+  const questionMatchFilters: Prisma.ProductQuestionWhereInput[] = [];
+
+  if (productId) {
+    reviewMatchFilters.push({ productId });
+    questionMatchFilters.push({ productId });
+  }
+  if (productHandle) {
+    reviewMatchFilters.push({ productHandle });
+    questionMatchFilters.push({ productHandle });
+  }
+  if (productTitle) {
+    reviewMatchFilters.push({ productTitle });
+    questionMatchFilters.push({ productTitle });
+  }
+
+  const [directPublishedReviews, titleFallbackReviews, questions] = await Promise.all([
     prisma.productReview.findMany({
-      where: { shopDomain, status: { in: publishedReviewStatuses } },
-      orderBy: { createdAt: "desc" },
-      take: 500
+      where: {
+        shopDomain,
+        status: { in: publishedReviewStatuses },
+        ...(reviewMatchFilters.length ? { OR: reviewMatchFilters } : { id: "__no_product_match__" })
+      },
+      orderBy: { createdAt: "desc" }
     }),
+    normalizedCurrentTitle
+      ? prisma.productReview.findMany({
+          where: {
+            shopDomain,
+            status: { in: publishedReviewStatuses },
+            productTitle: { not: "" }
+          },
+          orderBy: { createdAt: "desc" },
+          take: 2500
+        })
+      : Promise.resolve([]),
     prisma.productQuestion.findMany({
-      where: { shopDomain, productId, status: "PUBLISHED" },
+      where: {
+        shopDomain,
+        status: "PUBLISHED",
+        ...(questionMatchFilters.length ? { OR: questionMatchFilters } : { id: "__no_product_match__" })
+      },
       orderBy: { createdAt: "desc" },
       take: 25
     })
   ]);
-  const reviews = allPublishedReviews
-    .filter((review) => {
-      const normalizedReviewTitle = normalizeProductTitle(review.productTitle);
-      if (review.productId && review.productId === productId) return true;
-      if (productHandle && review.productHandle && review.productHandle === productHandle) return true;
-      if (productTitle && review.productTitle && review.productTitle.trim() === productTitle.trim()) return true;
-      if (normalizedCurrentTitle && normalizedReviewTitle === normalizedCurrentTitle) return true;
-      return Boolean(
-        normalizedCurrentTitle &&
-        normalizedReviewTitle &&
-        (normalizedReviewTitle.includes(normalizedCurrentTitle) || normalizedCurrentTitle.includes(normalizedReviewTitle))
-      );
-    });
+  const reviewMap = new Map<string, ProductReview>();
+  for (const review of directPublishedReviews) {
+    reviewMap.set(review.id, review);
+  }
+  for (const review of titleFallbackReviews) {
+    const normalizedReviewTitle = normalizeProductTitle(review.productTitle);
+    if (
+      normalizedCurrentTitle &&
+      normalizedReviewTitle &&
+      (normalizedReviewTitle === normalizedCurrentTitle ||
+        normalizedReviewTitle.includes(normalizedCurrentTitle) ||
+        normalizedCurrentTitle.includes(normalizedReviewTitle))
+    ) {
+      reviewMap.set(review.id, review);
+    }
+  }
+
+  const reviews = [...reviewMap.values()].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   const ratingTotal = reviews.reduce((total, review) => total + review.rating, 0);
 
   return {

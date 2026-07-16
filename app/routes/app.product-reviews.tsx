@@ -452,7 +452,7 @@ function ReviewRow({ review, busy }: { review: any; busy: boolean }) {
       <InlineStack gap="300" wrap={false} blockAlign="start">
         <BlockStack gap="150">
           <Text as="p" variant="headingSm">{review.customerName}</Text>
-          <Text as="p" tone="subdued">{review.productTitle || review.productId}</Text>
+          <Text as="p" tone="subdued">{review.productTitle || review.productHandle || review.productId}</Text>
           <Text as="p" tone="subdued">via {review.source === "IMPORTED" ? "Imported" : "Storefront"}</Text>
           <Button size="micro">Add tags</Button>
         </BlockStack>
@@ -1075,7 +1075,7 @@ function ReplyModal({ review, open, onClose }: { review: any; open: boolean; onC
         <BlockStack gap="300">
           <Card>
             <BlockStack gap="150">
-              <Text as="p" tone="subdued">{review.customerName} · {review.productTitle || review.productId}</Text>
+              <Text as="p" tone="subdued">{review.customerName} · {review.productTitle || review.productHandle || review.productId}</Text>
               <Text as="p"><span style={{ color: "#f5a623" }}>{stars(review.rating)}</span></Text>
               <Text as="h3" variant="headingSm">{review.title}</Text>
               <Text as="p">{review.content}</Text>
@@ -1239,10 +1239,12 @@ type ImportedCsvRow = Record<string, string>;
 function normalizeImportedReviewRow(row: ImportedCsvRow, importedAt: Date, isJudgeMeCsv: boolean) {
   if (isJudgeMeCsv) {
     const reply = getCsvField(row, "reply").trim();
+    const productHandle = getCsvField(row, "product_handle", "productHandle");
+    const productTitle = getCsvField(row, "product_title", "productTitle") || humanizeProductHandle(productHandle);
     return {
       productId: getCsvField(row, "product_id", "productId"),
-      productHandle: getCsvField(row, "product_handle", "productHandle"),
-      productTitle: getCsvField(row, "product_title", "productTitle"),
+      productHandle,
+      productTitle,
       customerName: getCsvField(row, "reviewer_name", "customerName"),
       customerEmail: getCsvField(row, "reviewer_email", "customerEmail"),
       rating: getCsvField(row, "rating"),
@@ -1258,10 +1260,12 @@ function normalizeImportedReviewRow(row: ImportedCsvRow, importedAt: Date, isJud
   }
 
   const reply = getCsvField(row, "merchantReply", "reply").trim();
+  const productHandle = getCsvField(row, "productHandle", "product_handle");
+  const productTitle = getCsvField(row, "productTitle", "product_title") || humanizeProductHandle(productHandle);
   return {
     productId: getCsvField(row, "productId", "product_id"),
-    productHandle: getCsvField(row, "productHandle", "product_handle"),
-    productTitle: getCsvField(row, "productTitle", "product_title"),
+    productHandle,
+    productTitle,
     customerName: getCsvField(row, "customerName", "reviewer_name"),
     customerEmail: getCsvField(row, "customerEmail", "reviewer_email"),
     rating: getCsvField(row, "rating"),
@@ -1303,6 +1307,14 @@ function fallbackImportedTitle(content: string) {
   const normalizedContent = content.replace(/\s+/g, " ").trim();
   if (!normalizedContent) return "";
   return normalizedContent.length > 60 ? `${normalizedContent.slice(0, 57)}...` : normalizedContent;
+}
+
+function humanizeProductHandle(handle: string) {
+  return handle
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 }
 
 function normalizeJudgeMeStatus(value: string) {
