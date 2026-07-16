@@ -29,6 +29,8 @@ type BrandTrustWidget = {
   layout: "carousel" | "micro";
 };
 
+type ThemeWidgetKey = "reviewWidget" | "starRating" | "brandCarousel" | "brandMicro";
+
 const productReviewWidgets = [
   {
     key: "reviewWidget",
@@ -89,6 +91,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     reviewEmailNotificationsEnabled: true,
     questionEmailNotificationsEnabled: true
   };
+  let themeInstallStatuses: Record<ThemeWidgetKey, boolean> = {
+    reviewWidget: false,
+    starRating: false,
+    brandCarousel: false,
+    brandMicro: false
+  };
 
   try {
     if (session.accessToken) {
@@ -109,6 +117,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       reviewEmailNotificationsEnabled: loadedShop.reviewEmailNotificationsEnabled,
       questionEmailNotificationsEnabled: loadedShop.questionEmailNotificationsEnabled
     };
+    themeInstallStatuses = await detectThemeCodeInstallStatuses(session.shop, session.accessToken || "");
   } catch (error) {
     console.error("Widgets Settings loader failed; rendering fallback UI", error);
   }
@@ -134,7 +143,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       reviewEmailNotificationsEnabled: shop.reviewEmailNotificationsEnabled,
       questionEmailNotificationsEnabled: shop.questionEmailNotificationsEnabled
     },
-    brandProfileExists: true
+    brandProfileExists: true,
+    themeInstallStatuses
   };
 };
 
@@ -142,6 +152,68 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const form = await request.formData();
   const intent = String(form.get("intent") || "");
+
+  if (intent === "installThemeCode" || intent === "uninstallThemeCode") {
+    const widgetKey = String(form.get("widgetKey") || "") as ThemeWidgetKey;
+    if (!isThemeWidgetKey(widgetKey)) {
+      return { ok: false, id: "", error: "Unsupported widget.", message: "", brandProfile: null, themeWidgetKey: "", installed: false };
+    }
+
+    try {
+      const currentSettings = await prisma.widgetSettings.upsert({
+        where: { shopDomain: session.shop },
+        update: {},
+        create: { shopDomain: session.shop }
+      });
+      const brandSlug = currentSettings.brandSlug || slugifyBrandName(currentSettings.brandName || "");
+      if ((widgetKey === "brandCarousel" || widgetKey === "brandMicro") && !brandSlug) {
+        return {
+          ok: false,
+          id: "",
+          error: "Enter and save your brand name before installing this widget.",
+          message: "",
+          brandProfile: null,
+          themeWidgetKey: widgetKey,
+          installed: false
+        };
+      }
+
+      if (intent === "installThemeCode") {
+        await installThemeWidgetCode(session.shop, session.accessToken || "", widgetKey, brandSlug);
+        return {
+          ok: true,
+          id: "",
+          error: "",
+          message: "Widget code installed in your live theme.",
+          brandProfile: null,
+          themeWidgetKey: widgetKey,
+          installed: true
+        };
+      }
+
+      await uninstallThemeWidgetCode(session.shop, session.accessToken || "", widgetKey);
+      return {
+        ok: true,
+        id: "",
+        error: "",
+        message: "Widget code removed from your live theme.",
+        brandProfile: null,
+        themeWidgetKey: widgetKey,
+        installed: false
+      };
+    } catch (error) {
+      console.error("Theme code install action failed", error);
+      return {
+        ok: false,
+        id: "",
+        error: error instanceof Error ? error.message : "Theme code update failed.",
+        message: "",
+        brandProfile: null,
+        themeWidgetKey: widgetKey,
+        installed: false
+      };
+    }
+  }
 
   if (intent === "saveNotificationSettings" || intent === "sendTestEmail") {
     const notificationEmail = String(form.get("notificationEmail") || "").trim();
@@ -218,9 +290,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function WidgetsSettings() {
-  const { googleSeoInstalled, themeEditorUrl, brandProfile, notificationSettings, brandProfileExists } = useLoaderData<typeof loader>();
+  const { googleSeoInstalled, themeEditorUrl, brandProfile, notificationSettings, brandProfileExists, themeInstallStatuses } = useLoaderData<typeof loader>();
   const brandFetcher = useFetcher<typeof action>();
   const notificationFetcher = useFetcher<typeof action>();
+  const themeCodeFetcher = useFetcher<typeof action>();
   const [manualWidget, setManualWidget] = React.useState<BrandTrustWidget | null>(null);
   const [brandName, setBrandName] = React.useState(brandProfile.brandName);
   const [notificationEmail, setNotificationEmail] = React.useState(notificationSettings.notificationEmail);
@@ -230,6 +303,23 @@ export default function WidgetsSettings() {
     ? brandFetcher.data.brandProfile
     : brandProfile;
   const brandSlug = savedBrandProfile.brandSlug;
+  const [installedState, setInstalledState] = React.useState<Record<ThemeWidgetKey, boolean>>(themeInstallStatuses);
+
+  React.useEffect(() => {
+    setInstalledState(themeInstallStatuses);
+  }, [themeInstallStatuses]);
+
+  React.useEffect(() => {
+    if (
+      themeCodeFetcher.data?.ok &&
+      "themeWidgetKey" in themeCodeFetcher.data &&
+      themeCodeFetcher.data.themeWidgetKey
+    ) {
+      const key = themeCodeFetcher.data.themeWidgetKey as ThemeWidgetKey;
+      const installed = "installed" in themeCodeFetcher.data ? Boolean(themeCodeFetcher.data.installed) : false;
+      setInstalledState((current) => ({ ...current, [key]: installed }));
+    }
+  }, [themeCodeFetcher.data]);
 
   return (
     <Page
@@ -240,10 +330,14 @@ export default function WidgetsSettings() {
       <BlockStack gap="500">
         <WidgetSection title="Product Review Widgets">
           {productReviewWidgets.map((widget) => {
+            const widgetKey = widget.key as ThemeWidgetKey;
             return (
               <WidgetCard key={widget.title} title={widget.title} description={widget.description} image={widget.image}>
+                <Badge tone={installedState[widgetKey] ? "success" : "attention"}>
+                  {installedState[widgetKey] ? "Installed by code" : "Not installed"}
+                </Badge>
                 <ButtonGroup>
-                  <Button url={themeEditorUrl} target="_blank">Install</Button>
+                  <ThemeCodeButton fetcher={themeCodeFetcher} widgetKey={widgetKey} installed={installedState[widgetKey]} />
                   <Button url={widget.customizeUrl} variant="primary">Customize</Button>
                 </ButtonGroup>
               </WidgetCard>
@@ -329,11 +423,15 @@ export default function WidgetsSettings() {
           </Card>
           {brandTrustWidgets.map((widget) => {
             const canInstall = Boolean(brandSlug);
+            const widgetKey = widget.key as ThemeWidgetKey;
             return (
             <WidgetCard key={widget.title} title={widget.title} description={widget.description} image={widget.image}>
               {!canInstall ? <Text as="p" tone="critical">Enter your brand name before installing this widget.</Text> : null}
+              <Badge tone={installedState[widgetKey] ? "success" : "attention"}>
+                {installedState[widgetKey] ? "Installed by code" : "Not installed"}
+              </Badge>
               <ButtonGroup>
-                <Button url={themeEditorUrl} target="_blank" disabled={!canInstall}>Install</Button>
+                <ThemeCodeButton fetcher={themeCodeFetcher} widgetKey={widgetKey} installed={installedState[widgetKey]} disabled={!canInstall} />
                 <Button onClick={() => setManualWidget(widget)} disabled={!canInstall}>Manual install</Button>
               </ButtonGroup>
             </WidgetCard>
@@ -359,8 +457,34 @@ export default function WidgetsSettings() {
           brandSlug={brandSlug}
           onClose={() => setManualWidget(null)}
         />
+        {themeCodeFetcher.data?.message ? <Badge tone="success">{themeCodeFetcher.data.message}</Badge> : null}
+        {themeCodeFetcher.data?.error ? <Text as="p" tone="critical">{themeCodeFetcher.data.error}</Text> : null}
       </BlockStack>
     </Page>
+  );
+}
+
+function ThemeCodeButton({
+  fetcher,
+  widgetKey,
+  installed,
+  disabled = false
+}: {
+  fetcher: ReturnType<typeof useFetcher<typeof action>>;
+  widgetKey: ThemeWidgetKey;
+  installed: boolean;
+  disabled?: boolean;
+}) {
+  const loading = fetcher.state !== "idle" && fetcher.formData?.get("widgetKey") === widgetKey;
+
+  return (
+    <fetcher.Form method="post">
+      <input type="hidden" name="intent" value={installed ? "uninstallThemeCode" : "installThemeCode"} />
+      <input type="hidden" name="widgetKey" value={widgetKey} />
+      <Button submit loading={loading} disabled={disabled}>
+        {installed ? "Uninstall" : "Install"}
+      </Button>
+    </fetcher.Form>
   );
 }
 
@@ -465,4 +589,194 @@ function slugifyBrandName(value: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
+}
+
+const apiVersion = "2025-10";
+const themeAssetCandidates = [
+  "sections/main-product.liquid",
+  "sections/product-template.liquid",
+  "templates/product.liquid"
+];
+
+const themeWidgetMarkers: Record<ThemeWidgetKey, { label: string; start: string; end: string }> = {
+  reviewWidget: {
+    label: "Review Widget",
+    start: "<!-- FBR_REVIEW_WIDGET_START -->",
+    end: "<!-- FBR_REVIEW_WIDGET_END -->"
+  },
+  starRating: {
+    label: "Star Rating Badge",
+    start: "<!-- FBR_STAR_RATING_START -->",
+    end: "<!-- FBR_STAR_RATING_END -->"
+  },
+  brandCarousel: {
+    label: "Brand Review Carousel",
+    start: "<!-- FBR_BRAND_CAROUSEL_START -->",
+    end: "<!-- FBR_BRAND_CAROUSEL_END -->"
+  },
+  brandMicro: {
+    label: "Brand Micro Trust Badge",
+    start: "<!-- FBR_BRAND_MICRO_START -->",
+    end: "<!-- FBR_BRAND_MICRO_END -->"
+  }
+};
+
+function isThemeWidgetKey(value: string): value is ThemeWidgetKey {
+  return ["reviewWidget", "starRating", "brandCarousel", "brandMicro"].includes(value);
+}
+
+async function detectThemeCodeInstallStatuses(shopDomain: string, accessToken: string) {
+  const statuses: Record<ThemeWidgetKey, boolean> = {
+    reviewWidget: false,
+    starRating: false,
+    brandCarousel: false,
+    brandMicro: false
+  };
+  if (!accessToken) return statuses;
+
+  const themeId = await getMainThemeId(shopDomain, accessToken);
+  const assets = await Promise.all(
+    themeAssetCandidates.map(async (assetKey) => ({
+      assetKey,
+      value: await getThemeAsset(shopDomain, accessToken, themeId, assetKey).catch(() => "")
+    }))
+  );
+  for (const key of Object.keys(themeWidgetMarkers) as ThemeWidgetKey[]) {
+    statuses[key] = assets.some((asset) => asset.value.includes(themeWidgetMarkers[key].start));
+  }
+
+  return statuses;
+}
+
+async function installThemeWidgetCode(shopDomain: string, accessToken: string, widgetKey: ThemeWidgetKey, brandSlug: string) {
+  if (!accessToken) {
+    throw new Error("Missing Shopify access token. Please reinstall the app and approve theme write permissions.");
+  }
+
+  const themeId = await getMainThemeId(shopDomain, accessToken);
+  const target = await findWritableProductThemeAsset(shopDomain, accessToken, themeId);
+  const marker = themeWidgetMarkers[widgetKey];
+  if (target.value.includes(marker.start)) {
+    return;
+  }
+
+  const nextValue = insertThemeWidgetCode(target.value, buildThemeWidgetSnippet(widgetKey, brandSlug));
+  await putThemeAsset(shopDomain, accessToken, themeId, target.assetKey, nextValue);
+}
+
+async function uninstallThemeWidgetCode(shopDomain: string, accessToken: string, widgetKey: ThemeWidgetKey) {
+  if (!accessToken) {
+    throw new Error("Missing Shopify access token. Please reinstall the app and approve theme write permissions.");
+  }
+
+  const themeId = await getMainThemeId(shopDomain, accessToken);
+  const marker = themeWidgetMarkers[widgetKey];
+  const assets = await Promise.all(
+    themeAssetCandidates.map(async (assetKey) => ({
+      assetKey,
+      value: await getThemeAsset(shopDomain, accessToken, themeId, assetKey).catch(() => "")
+    }))
+  );
+
+  for (const asset of assets) {
+    if (!asset.value.includes(marker.start)) continue;
+    const nextValue = removeMarkedThemeCode(asset.value, marker.start, marker.end);
+    await putThemeAsset(shopDomain, accessToken, themeId, asset.assetKey, nextValue);
+  }
+}
+
+async function findWritableProductThemeAsset(shopDomain: string, accessToken: string, themeId: string) {
+  for (const assetKey of themeAssetCandidates) {
+    try {
+      const value = await getThemeAsset(shopDomain, accessToken, themeId, assetKey);
+      if (value) return { assetKey, value };
+    } catch {
+      // Try the next common product template file.
+    }
+  }
+
+  throw new Error("Could not find a supported product template file in the live theme. Use Manual install for this theme.");
+}
+
+function buildThemeWidgetSnippet(widgetKey: ThemeWidgetKey, brandSlug: string) {
+  const marker = themeWidgetMarkers[widgetKey];
+  const appUrl = (process.env.SHOPIFY_APP_URL || "https://app.furniturebrandreviews.com").replace(/\/$/, "");
+  const productAttrs = `data-api-base="/apps/fbr"\n  data-shop="{{ shop.permanent_domain }}"\n  data-product-id="{{ product.id }}"\n  data-product-handle="{{ product.handle }}"\n  data-product-title="{{ product.title | escape }}"`;
+  let body = "";
+
+  if (widgetKey === "reviewWidget") {
+    body = `<link rel="stylesheet" href="${appUrl}/fbr-widgets.css">\n<script src="${appUrl}/fbr-widgets.js" defer></script>\n<div class="fbr-widget" data-fbr-product-reviews ${productAttrs}></div>`;
+  } else if (widgetKey === "starRating") {
+    body = `<link rel="stylesheet" href="${appUrl}/fbr-widgets.css">\n<script src="${appUrl}/fbr-widgets.js" defer></script>\n<div class="fbr-widget" data-fbr-product-stars ${productAttrs}></div>`;
+  } else if (widgetKey === "brandCarousel") {
+    body = `<div class="fbr-widget" data-brand="${brandSlug}" data-layout="carousel"></div>\n<script async src="https://www.furniturebrandreviews.com/widget.js"></script>`;
+  } else {
+    body = `<div class="fbr-widget" data-brand="${brandSlug}" data-layout="micro"></div>\n<script async src="https://www.furniturebrandreviews.com/widget.js"></script>`;
+  }
+
+  return `\n${marker.start}\n${body}\n${marker.end}\n`;
+}
+
+function insertThemeWidgetCode(themeValue: string, snippet: string) {
+  const schemaIndex = themeValue.indexOf("{% schema %}");
+  if (schemaIndex >= 0) {
+    return `${themeValue.slice(0, schemaIndex).trimEnd()}\n${snippet}\n${themeValue.slice(schemaIndex)}`;
+  }
+
+  return `${themeValue.trimEnd()}\n${snippet}\n`;
+}
+
+function removeMarkedThemeCode(themeValue: string, start: string, end: string) {
+  const pattern = new RegExp(`\\n?${escapeRegExp(start)}[\\s\\S]*?${escapeRegExp(end)}\\n?`, "g");
+  return themeValue.replace(pattern, "\n");
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function getMainThemeId(shopDomain: string, accessToken: string) {
+  const data = await shopifyRest<{ themes: Array<{ id: number; role: string }> }>(shopDomain, accessToken, "/themes.json");
+  const theme = data.themes.find((item) => item.role === "main") || data.themes.find((item) => item.role === "live");
+  if (!theme) {
+    throw new Error("Could not find the live theme.");
+  }
+  return String(theme.id);
+}
+
+async function getThemeAsset(shopDomain: string, accessToken: string, themeId: string, assetKey: string) {
+  const params = new URLSearchParams({ "asset[key]": assetKey });
+  const data = await shopifyRest<{ asset?: { value?: string } }>(
+    shopDomain,
+    accessToken,
+    `/themes/${themeId}/assets.json?${params.toString()}`
+  );
+  return data.asset?.value || "";
+}
+
+async function putThemeAsset(shopDomain: string, accessToken: string, themeId: string, assetKey: string, value: string) {
+  await shopifyRest(shopDomain, accessToken, `/themes/${themeId}/assets.json`, {
+    method: "PUT",
+    body: JSON.stringify({ asset: { key: assetKey, value } })
+  });
+}
+
+async function shopifyRest<T = unknown>(shopDomain: string, accessToken: string, path: string, init: RequestInit = {}) {
+  const response = await fetch(`https://${shopDomain}/admin/api/${apiVersion}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Shopify-Access-Token": accessToken,
+      ...(init.headers || {})
+    }
+  });
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!response.ok) {
+    const message = typeof data?.errors === "string"
+      ? data.errors
+      : JSON.stringify(data?.errors || data);
+    throw new Error(`Shopify theme API failed (${response.status}): ${message}`);
+  }
+  return data as T;
 }
