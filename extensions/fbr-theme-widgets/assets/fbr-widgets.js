@@ -1064,6 +1064,8 @@
     watchLegacyFloatingBadges();
 
     document.querySelectorAll("[data-fbr-product-stars]").forEach(async (el) => {
+      if (el.dataset.fbrRendered === "true") return;
+      el.dataset.fbrRendered = "true";
       try {
         const data = await fetchJson(productReviewUrl(el));
         renderProductStars(el, data);
@@ -1074,6 +1076,8 @@
     });
 
     document.querySelectorAll("[data-fbr-product-reviews]").forEach(async (el) => {
+      if (el.dataset.fbrRendered === "true") return;
+      el.dataset.fbrRendered = "true";
       try {
         const data = await fetchJson(productReviewUrl(el));
         const settings = data.widgetSettings || await fetchJson(`${apiBase(el)}/api/product-review-widget-settings?shop=${encodeURIComponent(shop(el))}&_=${Date.now()}`).catch(() => defaultProductSettings);

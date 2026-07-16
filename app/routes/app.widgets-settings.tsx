@@ -32,6 +32,7 @@ type BrandTrustWidget = {
 type ManualInstallWidget = {
   title: string;
   code: string;
+  kind: "productReview" | "starRating" | "brandTrust";
 };
 
 const productReviewWidgets = [
@@ -252,7 +253,8 @@ export default function WidgetsSettings() {
                   <Button url={themeEditorUrl} target="_blank">Install</Button>
                   <Button onClick={() => setManualWidget({
                     title: widget.title,
-                    code: buildProductManualInstallCode(appUrl, widget.key)
+                    code: buildProductManualInstallCode(appUrl, widget.key),
+                    kind: widget.key === "starRating" ? "starRating" : "productReview"
                   })}>
                     Manual install
                   </Button>
@@ -349,7 +351,8 @@ export default function WidgetsSettings() {
                 <Button
                   onClick={() => setManualWidget({
                     title: widget.title,
-                    code: buildBrandManualInstallCode(widget.layout, brandSlug)
+                    code: buildBrandManualInstallCode(widget.layout, brandSlug),
+                    kind: "brandTrust"
                   })}
                   disabled={!canInstall}
                 >
@@ -428,6 +431,7 @@ function WidgetCard({ title, description, image, children }: { title: string; de
 function ManualInstallModal({ widget, onClose }: { widget: ManualInstallWidget | null; onClose: () => void }) {
   const [copied, setCopied] = React.useState(false);
   const code = widget?.code || "";
+  const isProductWidget = widget?.kind === "productReview" || widget?.kind === "starRating";
 
   React.useEffect(() => {
     if (!widget) setCopied(false);
@@ -448,13 +452,45 @@ function ManualInstallModal({ widget, onClose }: { widget: ManualInstallWidget |
       secondaryActions={[{ content: "Close", onAction: onClose }]}
     >
       <Modal.Section>
-        <BlockStack gap="300">
-          <Text as="p">Paste this code into your theme, page, blog, or custom liquid section.</Text>
+        <BlockStack gap="400">
+          {isProductWidget ? (
+            <BlockStack gap="300">
+              <Text as="p" variant="headingSm">Add the widget code</Text>
+              <Text as="p" tone="subdued">
+                Use this manual method only if the Theme Editor app block cannot be added in your theme. The code below works like Judge.me: it creates a small placeholder, then Furniture Brand Reviews loads the full widget in that exact position.
+              </Text>
+              <Box as="div" paddingInlineStart="400">
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  <li>In Shopify Admin, open <strong>Online Store → Themes → Edit code</strong>.</li>
+                  <li>Open your product template, usually <strong>templates/product.liquid</strong>, <strong>sections/main-product.liquid</strong>, or a product template JSON section used by your theme.</li>
+                  <li>Paste the code where you want the widget to appear, for example below the product description, below product tabs, or near the bottom of the product page.</li>
+                  <li>Click <strong>Save</strong>, then refresh a product page to check the widget.</li>
+                </ul>
+              </Box>
+            </BlockStack>
+          ) : (
+            <BlockStack gap="300">
+              <Text as="p" variant="headingSm">Add the widget code</Text>
+              <Text as="p" tone="subdued">
+                Paste this code into a Custom Liquid section, page, blog post, footer, or theme file where you want the FurnitureBrandReviews brand trust widget to appear.
+              </Text>
+              <Box as="div" paddingInlineStart="400">
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  <li>Open the page, section, or theme file where you want the widget.</li>
+                  <li>Paste the code in that position.</li>
+                  <li>Click <strong>Save</strong>, then refresh the storefront.</li>
+                </ul>
+              </Box>
+            </BlockStack>
+          )}
           <Box background="bg-surface-secondary" borderRadius="200" padding="300">
             <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
               <code>{code}</code>
             </pre>
           </Box>
+          <Text as="p" tone="subdued">
+            If you paste this code manually, it will not appear as a Theme Editor app block. It will render directly at the place where the code was pasted.
+          </Text>
         </BlockStack>
       </Modal.Section>
     </Modal>
@@ -486,7 +522,9 @@ function slugifyBrandName(value: string) {
 
 function buildProductManualInstallCode(appUrl: string, widgetKey: string) {
   const dataAttribute = widgetKey === "starRating" ? "data-fbr-product-stars" : "data-fbr-product-reviews";
-  return `<link rel="stylesheet" href="${appUrl}/fbr-widgets.css">
+  const label = widgetKey === "starRating" ? "Product Star Rating" : "Product Reviews Widget";
+  return `<!-- Start Furniture Brand Reviews ${label} code -->
+<link rel="stylesheet" href="${appUrl}/fbr-widgets.css">
 <script src="${appUrl}/fbr-widgets.js" defer></script>
 <div
   class="fbr-widget"
@@ -496,7 +534,8 @@ function buildProductManualInstallCode(appUrl: string, widgetKey: string) {
   data-product-id="{{ product.id }}"
   data-product-handle="{{ product.handle }}"
   data-product-title="{{ product.title | escape }}"
-></div>`;
+></div>
+<!-- End Furniture Brand Reviews ${label} code -->`;
 }
 
 function buildBrandManualInstallCode(layout: BrandTrustWidget["layout"], brandSlug: string) {
