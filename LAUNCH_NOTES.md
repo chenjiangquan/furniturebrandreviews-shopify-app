@@ -16,7 +16,7 @@ Backend:
 SHOPIFY_API_KEY=
 SHOPIFY_API_SECRET=
 SHOPIFY_APP_URL=https://app.furniturebrandreviews.com
-SCOPES=read_products,read_themes,write_themes
+SCOPES=read_products,read_themes
 DATABASE_URL=
 ```
 

@@ -8,7 +8,7 @@ automatically_update_urls_on_dev = true
 dev_store_url = "furniture-brand-reviews-dev.myshopify.com"
 
 [access_scopes]
-scopes = "read_products,read_themes,write_themes"
+scopes = "read_products,read_themes"
 
 [auth]
 redirect_urls = [
