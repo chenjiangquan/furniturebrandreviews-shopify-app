@@ -11,6 +11,7 @@ import {
   Checkbox,
   InlineGrid,
   InlineStack,
+  Link,
   Modal,
   Page,
   Text,
@@ -119,6 +120,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const themeEditorUrl = `https://${session.shop}/admin/themes/current/editor?template=product`;
+  const productLiquidUrl = `https://${session.shop}/admin/themes/current?key=templates/product.liquid`;
   const appUrl = (process.env.SHOPIFY_APP_URL || "https://app.furniturebrandreviews.com").replace(/\/$/, "");
   const brandSlug = widgetSettings.brandSlug || brandSlugFromProfileUrl(widgetSettings.profileUrl) || "";
   const brandProfileUrl = widgetSettings.profileUrl?.includes("/review/") ? widgetSettings.profileUrl : "";
@@ -130,6 +132,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     googleSeoInstalled,
     themeEditorUrl,
+    productLiquidUrl,
     brandProfile: {
       brandName: widgetSettings.brandName || "",
       brandSlug,
@@ -225,7 +228,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function WidgetsSettings() {
-  const { googleSeoInstalled, themeEditorUrl, brandProfile, notificationSettings, appUrl } = useLoaderData<typeof loader>();
+  const { googleSeoInstalled, themeEditorUrl, productLiquidUrl, brandProfile, notificationSettings, appUrl } = useLoaderData<typeof loader>();
   const brandFetcher = useFetcher<typeof action>();
   const notificationFetcher = useFetcher<typeof action>();
   const [manualWidget, setManualWidget] = React.useState<ManualInstallWidget | null>(null);
@@ -379,6 +382,7 @@ export default function WidgetsSettings() {
 
         <ManualInstallModal
           widget={manualWidget}
+          productLiquidUrl={productLiquidUrl}
           onClose={() => setManualWidget(null)}
         />
       </BlockStack>
@@ -428,7 +432,15 @@ function WidgetCard({ title, description, image, children }: { title: string; de
   );
 }
 
-function ManualInstallModal({ widget, onClose }: { widget: ManualInstallWidget | null; onClose: () => void }) {
+function ManualInstallModal({
+  widget,
+  productLiquidUrl,
+  onClose
+}: {
+  widget: ManualInstallWidget | null;
+  productLiquidUrl: string;
+  onClose: () => void;
+}) {
   const [copied, setCopied] = React.useState(false);
   const code = widget?.code || "";
   const isProductWidget = widget?.kind === "productReview" || widget?.kind === "starRating";
@@ -456,17 +468,23 @@ function ManualInstallModal({ widget, onClose }: { widget: ManualInstallWidget |
           {isProductWidget ? (
             <BlockStack gap="300">
               <Text as="p" variant="headingSm">Add the widget code</Text>
-              <Text as="p" tone="subdued">
-                Use this manual method only if the Theme Editor app block cannot be added in your theme. The code below works like Judge.me: it creates a small placeholder, then Furniture Brand Reviews loads the full widget in that exact position.
-              </Text>
               <Box as="div" paddingInlineStart="400">
                 <ul style={{ margin: 0, paddingLeft: 18 }}>
-                  <li>In Shopify Admin, open <strong>Online Store → Themes → Edit code</strong>.</li>
-                  <li>Open your product template, usually <strong>templates/product.liquid</strong>, <strong>sections/main-product.liquid</strong>, or a product template JSON section used by your theme.</li>
-                  <li>Paste the code where you want the widget to appear, for example below the product description, below product tabs, or near the bottom of the product page.</li>
-                  <li>Click <strong>Save</strong>, then refresh a product page to check the widget.</li>
+                  <li>
+                    Open{" "}
+                    <Link url={productLiquidUrl} target="_blank">
+                      templates/product.liquid
+                    </Link>
+                    .
+                  </li>
+                  <li>
+                    Under <strong>{`{% section 'product-template' %}`}</strong>, add the following code:
+                  </li>
                 </ul>
               </Box>
+              <Text as="p" tone="subdued">
+                If your theme does not have <strong>templates/product.liquid</strong>, paste the code in <strong>sections/main-product.liquid</strong> or a Custom Liquid block where you want the widget to appear.
+              </Text>
             </BlockStack>
           ) : (
             <BlockStack gap="300">
@@ -488,9 +506,16 @@ function ManualInstallModal({ widget, onClose }: { widget: ManualInstallWidget |
               <code>{code}</code>
             </pre>
           </Box>
-          <Text as="p" tone="subdued">
-            If you paste this code manually, it will not appear as a Theme Editor app block. It will render directly at the place where the code was pasted.
-          </Text>
+          <Box as="div" paddingInlineStart="400">
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              <li>Click <strong>Save</strong>.</li>
+            </ul>
+          </Box>
+          {isProductWidget ? (
+            <Text as="p" tone="subdued">
+              Manual code renders directly where it is pasted. It will not show as a Theme Editor app block.
+            </Text>
+          ) : null}
         </BlockStack>
       </Modal.Section>
     </Modal>
