@@ -252,6 +252,12 @@ export default function ProductReviewWidgetSettings() {
                 <RangeSlider label="Star gap" min={-4} max={8} value={draft.starGap} onChange={(value) => setValue("starGap", sliderNumber(value))} output />
                 <Divider />
                 <ColorField label="Rating bar color" value={draft.ratingBarColor} onChange={(value) => setValue("ratingBarColor", value)} />
+                <Divider />
+                <Text as="h3" variant="headingSm">Rating summary badge settings</Text>
+                <ColorField label="Rating badge background color" value={draft.ratingBadgeBackgroundColor} onChange={(value) => setValue("ratingBadgeBackgroundColor", value)} />
+                <RangeSlider label="Rating badge border radius" min={0} max={999} step={1} value={draft.ratingBadgeBorderRadius} onChange={(value) => setValue("ratingBadgeBorderRadius", sliderNumber(value))} output />
+                <RangeSlider label="Rating badge padding" min={4} max={24} value={draft.ratingBadgePadding} onChange={(value) => setValue("ratingBadgePadding", sliderNumber(value))} output />
+                <Divider />
                 <ColorField label="Button background color" value={draft.buttonBackgroundColor} onChange={(value) => setValue("buttonBackgroundColor", value)} />
                 <ColorField label="Button text color" value={draft.buttonTextColor} onChange={(value) => setValue("buttonTextColor", value)} />
                 <ColorField label="Border color" value={draft.borderColor} onChange={(value) => setValue("borderColor", value)} />
@@ -262,11 +268,7 @@ export default function ProductReviewWidgetSettings() {
                 <RangeSlider label="Widget border" min={0} max={3} step={1} value={draft.widgetBorderWidth} onChange={(value) => setValue("widgetBorderWidth", sliderNumber(value))} output />
                 <RangeSlider label="Widget border radius" min={0} max={32} step={1} value={draft.widgetBorderRadius} onChange={(value) => setValue("widgetBorderRadius", sliderNumber(value))} output />
                 <Divider />
-                <Text as="h3" variant="headingSm">Rating summary badge settings</Text>
-                <ColorField label="Rating badge background color" value={draft.ratingBadgeBackgroundColor} onChange={(value) => setValue("ratingBadgeBackgroundColor", value)} />
-                <RangeSlider label="Rating badge border radius" min={0} max={999} step={1} value={draft.ratingBadgeBorderRadius} onChange={(value) => setValue("ratingBadgeBorderRadius", sliderNumber(value))} output />
-                <RangeSlider label="Rating badge padding" min={4} max={24} value={draft.ratingBadgePadding} onChange={(value) => setValue("ratingBadgePadding", sliderNumber(value))} output />
-                <Divider />
+                <Toggle label="Show reviewer initials avatar" checked={draft.showReviewerPhotos} onChange={(value) => setValue("showReviewerPhotos", value)} />
                 <Text as="h3" variant="headingSm">Reviewer avatar settings</Text>
                 <ColorField label="Avatar background color" value={draft.avatarBackgroundColor} onChange={(value) => setValue("avatarBackgroundColor", value)} />
                 <ColorField label="Avatar text color" value={draft.avatarTextColor} onChange={(value) => setValue("avatarTextColor", value)} />
@@ -292,7 +294,6 @@ export default function ProductReviewWidgetSettings() {
                 <RangeSlider label="Number of photos to show" min={4} max={20} value={draft.photoSummaryLimit} onChange={(value) => setValue("photoSummaryLimit", sliderNumber(value))} output />
                 <Divider />
                 <Toggle label="Show verified badge" checked={draft.showVerifiedBadge} onChange={(value) => setValue("showVerifiedBadge", value)} />
-                <Toggle label="Show reviewer initials avatar" checked={draft.showReviewerPhotos} onChange={(value) => setValue("showReviewerPhotos", value)} />
                 <Toggle label="Hide review date" checked={draft.hideReviewDate} onChange={(value) => setValue("hideReviewDate", value)} />
                 <Divider />
                 <Text as="h3" variant="headingSm">Typography and content colors</Text>

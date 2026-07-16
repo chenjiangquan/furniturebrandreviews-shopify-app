@@ -464,9 +464,10 @@
   }
 
   function renderReviewModal(el, settings) {
+    const formRadius = Number(settings.borderRadius) || 6;
     return `
       <div class="fbr-modal-backdrop" data-fbr-review-modal aria-hidden="true">
-        <div class="fbr-modal" role="dialog" aria-modal="true" aria-labelledby="fbr-review-modal-title">
+        <div class="fbr-modal" role="dialog" aria-modal="true" aria-labelledby="fbr-review-modal-title" style="--fbr-form-radius:${formRadius}px; --fbr-button-radius:${formRadius}px;">
           <div class="fbr-modal-header">
             <h3 id="fbr-review-modal-title">Write a review</h3>
             <button class="fbr-modal-close" type="button" data-fbr-close-review aria-label="Close review form">×</button>
@@ -521,9 +522,10 @@
   }
 
   function renderQuestionModal(el, settings) {
+    const formRadius = Number(settings.borderRadius) || 6;
     return `
       <div class="fbr-modal-backdrop" data-fbr-question-modal aria-hidden="true">
-        <div class="fbr-modal" role="dialog" aria-modal="true" aria-labelledby="fbr-question-modal-title">
+        <div class="fbr-modal" role="dialog" aria-modal="true" aria-labelledby="fbr-question-modal-title" style="--fbr-form-radius:${formRadius}px; --fbr-button-radius:${formRadius}px;">
           <div class="fbr-modal-header">
             <h3 id="fbr-question-modal-title">Ask a question</h3>
             <button class="fbr-modal-close" type="button" data-fbr-close-question aria-label="Close question form">×</button>
