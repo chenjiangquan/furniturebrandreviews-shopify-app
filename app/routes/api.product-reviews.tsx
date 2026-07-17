@@ -61,7 +61,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return corsJson({
     ...summary,
     seoRichSnippetsEnabled: entitlements.isPro && Boolean(googleSeoSettings?.seoRichSnippetsEnabled),
-    widgetSettings
+    widgetSettings: {
+      ...widgetSettings,
+      layoutType: entitlements.isPro ? widgetSettings.layoutType : "standard"
+    }
   }, {
     headers: {
       "Cache-Control": "public, max-age=30, stale-while-revalidate=300"

@@ -21,6 +21,7 @@ import {
 } from "@shopify/polaris";
 import { Prisma } from "@prisma/client";
 import prisma from "~/db.server";
+import { syncAdminEntitlements } from "~/models/entitlements.server";
 import { defaultProductReviewWidgetSettings } from "~/models/product-review-widget-settings";
 import { getProductReviewWidgetSettings } from "~/models/reviews.server";
 import { authenticate } from "~/shopify.server";
@@ -100,13 +101,18 @@ const textFields = [
 ] as const;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
+  const entitlements = await syncAdminEntitlements(session.shop, billing);
   const settings = await getProductReviewWidgetSettings(session.shop);
-  return { settings };
+  return {
+    entitlements,
+    settings: entitlements.isPro ? settings : { ...settings, layoutType: "standard" }
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
+  const entitlements = await syncAdminEntitlements(session.shop, billing);
   const form = await request.formData();
   const shopDomain = session.shop;
   await prisma.shop.upsert({
@@ -135,7 +141,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     ...Object.fromEntries(numberFields.map((field) => [field, numberFromForm(form, field)])),
     ...Object.fromEntries(textFields.map((field) => [field, textFromForm(form, field)]))
   };
-  data.layoutType = ["standard", "cards", "carousel"].includes(String(data.layoutType)) ? String(data.layoutType) : "standard";
+  const requestedLayout = ["standard", "cards", "carousel", "sidebar"].includes(String(data.layoutType))
+    ? String(data.layoutType)
+    : "standard";
+  data.layoutType = entitlements.isPro ? requestedLayout : "standard";
   data.photoSummaryLimit = Math.max(4, Math.min(20, Number(data.photoSummaryLimit) || defaultProductReviewWidgetSettings.photoSummaryLimit));
   const submittedWidgetBorderWidth = Math.max(0, Math.min(3, numberFromForm(form, "widgetBorderWidth")));
   const submittedWidgetBorderRadius = Math.max(0, Math.min(32, numberFromForm(form, "widgetBorderRadius")));
@@ -190,7 +199,7 @@ function sliderNumber(value: number | [number, number]) {
 }
 
 export default function ProductReviewWidgetSettings() {
-  const { settings } = useLoaderData<typeof loader>();
+  const { entitlements, settings } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [draft, setDraft] = React.useState<WidgetSettings>(normalizeWidgetSettings({
     ...defaultProductReviewWidgetSettings,
@@ -311,15 +320,28 @@ export default function ProductReviewWidgetSettings() {
             <Card>
               <BlockStack gap="300">
                 <Text as="h2" variant="headingMd">Layout Settings</Text>
+                {!entitlements.isPro ? (
+                  <Box background="bg-surface-secondary" borderRadius="200" padding="300">
+                    <BlockStack gap="200">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Text as="p" variant="headingSm">Standard layout included</Text>
+                        <Badge>Free plan</Badge>
+                      </InlineStack>
+                      <Text as="p" tone="subdued">Upgrade to Pro to unlock Cards, Carousel, and Sidebar layouts.</Text>
+                      <div><Button url="/app" size="micro">Upgrade to Pro</Button></div>
+                    </BlockStack>
+                  </Box>
+                ) : null}
                 <Select
                   label="Layout type"
                   options={[
                     { label: "Standard", value: "standard" },
-                    { label: "Cards", value: "cards" },
-                    { label: "Carousel", value: "carousel" }
+                    { label: entitlements.isPro ? "Cards" : "Cards — Pro", value: "cards", disabled: !entitlements.isPro },
+                    { label: entitlements.isPro ? "Carousel" : "Carousel — Pro", value: "carousel", disabled: !entitlements.isPro },
+                    { label: entitlements.isPro ? "Sidebar" : "Sidebar — Pro", value: "sidebar", disabled: !entitlements.isPro }
                   ]}
                   value={draft.layoutType}
-                  onChange={(value) => setValue("layoutType", value)}
+                  onChange={(value) => setValue("layoutType", entitlements.isPro ? value : "standard")}
                 />
                 {draft.layoutType === "carousel" ? (
                   <>
@@ -394,6 +416,8 @@ function normalizeWidgetSettings(settings: WidgetSettings): WidgetSettings {
       ? "cards"
       : settings.layoutType === "carousel"
         ? "carousel"
+        : settings.layoutType === "sidebar"
+          ? "sidebar"
         : "standard";
 
   const sortDefault = settings.sortDefault === "lowest_rating" ? "pictures_first" : settings.sortDefault;
@@ -550,6 +574,142 @@ function ProductReviewPreview({ settings }: { settings: WidgetSettings }) {
       answer: "The delivery team can remove the legs and confirm access before arrival."
     }
   ];
+
+  if (settings.layoutType === "sidebar") {
+    return (
+      <div style={{ position: "sticky", top: 16, alignSelf: "start", minWidth: 0, overflow: "hidden", width: "100%" }}>
+        <Card>
+          <BlockStack gap="400">
+            <InlineStack align="space-between" blockAlign="start">
+              <Text as="p" tone="subdued">Previewing: Sidebar layout</Text>
+              <InlineStack gap="200">
+                <Badge tone="success">Pro layout</Badge>
+                {settings.productReviewWidgetEnabled ? <Badge tone="success">Enabled</Badge> : <Badge>Disabled</Badge>}
+              </InlineStack>
+            </InlineStack>
+            <Divider />
+            <div style={{ overflowX: "auto" }}>
+              <div
+                style={{
+                  background: settings.widgetBackgroundColor,
+                  border: Number(settings.widgetBorderWidth) > 0 ? `${settings.widgetBorderWidth}px solid ${settings.borderColor}` : "0",
+                  borderRadius: settings.widgetBorderRadius,
+                  color: settings.textColor,
+                  display: "grid",
+                  gap: 42,
+                  gridTemplateColumns: "minmax(240px, 290px) minmax(440px, 1fr)",
+                  minWidth: 760,
+                  padding: 22,
+                  width: "100%"
+                }}
+              >
+                <aside>
+                  <BlockStack gap="400">
+                    <BlockStack gap="150">
+                      <Text as="h2" variant="headingLg">Customer Reviews</Text>
+                      <InlineStack gap="200" blockAlign="baseline">
+                        <Text as="p" variant="headingXl">4.7</Text>
+                        <Text as="p" tone="subdued">238 reviews</Text>
+                      </InlineStack>
+                    </BlockStack>
+
+                    {settings.showPhotoSummary && previewPhotos.length ? (
+                      <div style={{ display: "grid", gap: 6, gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+                        {previewPhotos.slice(0, 3).map((review) => (
+                          <img key={review.imageUrl} src={review.imageUrl} alt="" style={{ aspectRatio: "1", borderRadius: 8, objectFit: "cover", width: "100%" }} />
+                        ))}
+                      </div>
+                    ) : null}
+
+                    <BlockStack gap="200">
+                      {settings.showWriteReviewButton ? <PreviewButton settings={settings} fullWidth>Write a review</PreviewButton> : null}
+                      {settings.showAskQuestionButton ? <PreviewButton settings={settings} fullWidth secondary onClick={() => setActiveTab("questions")}>Ask a question</PreviewButton> : null}
+                    </BlockStack>
+
+                    {settings.showRatingBreakdown ? (
+                      <BlockStack gap="200">
+                        {breakdown.map((item) => {
+                          const percent = Math.round((item.count / totalBreakdown) * 100);
+                          return (
+                            <div key={item.rating} style={{ alignItems: "center", display: "grid", gap: 8, gridTemplateColumns: "78px 1fr 30px" }}>
+                              <span style={{ color: settings.starColor, fontSize: 12, whiteSpace: "nowrap" }}>{"★★★★★".slice(0, item.rating)}{"☆☆☆☆☆".slice(0, 5 - item.rating)}</span>
+                              <span style={{ background: "#eef0f2", height: 3, overflow: "hidden" }}>
+                                <span style={{ background: settings.ratingBarColor, display: "block", height: "100%", width: `${percent}%` }} />
+                              </span>
+                              <span style={{ color: settings.lighterTextColor, textAlign: "right" }}>{item.count}</span>
+                            </div>
+                          );
+                        })}
+                      </BlockStack>
+                    ) : null}
+
+                    {settings.showAiSummary ? (
+                      <div style={{ ...reviewCardStyle, background: "#f7faf9" }}>
+                        <BlockStack gap="200">
+                          <Text as="h3" variant="headingSm">Customers say</Text>
+                          <Text as="p">Customers praise the quality, accurate product photos, careful delivery and helpful support.</Text>
+                          <Text as="p" tone="subdued">*AI-powered review summary based on recent customer reviews</Text>
+                          {settings.showReviewHighlights ? (
+                            <InlineStack gap="150">
+                              {["Quality", "Delivery", "Service"].map((label) => <Badge key={label}>{label}</Badge>)}
+                            </InlineStack>
+                          ) : null}
+                        </BlockStack>
+                      </div>
+                    ) : null}
+                  </BlockStack>
+                </aside>
+
+                <main style={{ minWidth: 0 }}>
+                  <div style={{ alignItems: "center", borderBottom: `1px solid ${settings.borderColor}`, display: "flex", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", gap: 22 }}>
+                      <PreviewTab active={activeTab === "reviews"} settings={settings} onClick={() => setActiveTab("reviews")}>Reviews (238)</PreviewTab>
+                      <PreviewTab active={activeTab === "questions"} settings={settings} onClick={() => setActiveTab("questions")}>Questions ({previewQuestions.length})</PreviewTab>
+                    </div>
+                    <select aria-label="Sort reviews" value={reviewFilter} onChange={(event) => setReviewFilter(event.currentTarget.value)} style={{ border: `1px solid ${settings.textColor}`, borderRadius: 6, height: 40, marginBottom: 8, padding: "0 28px 0 10px" }}>
+                      {reviewSortOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </div>
+
+                  {activeTab === "reviews" ? (
+                    <div>
+                      {previewReviews.map((review) => (
+                        <article key={review.title} style={{ borderBottom: `1px solid ${settings.borderColor}`, padding: "26px 0" }}>
+                          <BlockStack gap="200">
+                            <StarRating rating={review.rating} settings={settings} />
+                            <InlineStack gap="200" blockAlign="center">
+                              {settings.showReviewerPhotos ? <InitialsAvatar name={review.name} settings={settings} /> : null}
+                              <Text as="p" variant="headingSm">{review.name}{settings.hideReviewDate ? "" : ` · ${review.date}`}</Text>
+                            </InlineStack>
+                            <Text as="h3" variant="headingMd"><span style={{ color: settings.titleTextColor }}>{review.title}</span></Text>
+                            <Text as="p"><span style={{ color: settings.contentTextColor }}>{review.content}</span></Text>
+                            {review.imageUrl ? <img src={review.imageUrl} alt="" style={{ borderRadius: settings.borderRadius, height: 150, objectFit: "cover", width: 170 }} /> : null}
+                            <InlineStack gap="200" blockAlign="center">
+                              <Text as="span" tone="subdued">Helpful?</Text>
+                              <Text as="span" tone="subdued">👍 3</Text>
+                              <Text as="span" tone="subdued">👎 0</Text>
+                            </InlineStack>
+                          </BlockStack>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ padding: "26px 0" }}>
+                      <BlockStack gap="200">
+                        <Text as="h3" variant="headingMd">Customer questions</Text>
+                        <Text as="p"><strong>Q:</strong> {previewQuestions[0].question}</Text>
+                        <Text as="p" tone="subdued"><strong>A:</strong> {previewQuestions[0].answer}</Text>
+                      </BlockStack>
+                    </div>
+                  )}
+                </main>
+              </div>
+            </div>
+          </BlockStack>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div style={{ position: "sticky", top: 16, alignSelf: "start", minWidth: 0, overflow: "hidden", width: "100%" }}>
@@ -1190,7 +1350,7 @@ function normalizeHex(value: string) {
   return "#000000";
 }
 
-function PreviewButton({ settings, children, onClick }: { settings: WidgetSettings; children: React.ReactNode; onClick?: () => void }) {
+function PreviewButton({ settings, children, onClick, fullWidth = false, secondary = false }: { settings: WidgetSettings; children: React.ReactNode; onClick?: () => void; fullWidth?: boolean; secondary?: boolean }) {
   return (
     <button
       type="button"
@@ -1198,12 +1358,13 @@ function PreviewButton({ settings, children, onClick }: { settings: WidgetSettin
       style={{
         border: `1px solid ${settings.buttonBorderColor}`,
         borderRadius: settings.buttonBorderRadius,
-        background: settings.buttonBackgroundColor,
-        color: settings.buttonTextColor,
+        background: secondary ? settings.cardBackgroundColor : settings.buttonBackgroundColor,
+        color: secondary ? settings.textColor : settings.buttonTextColor,
         padding: "10px 14px",
         fontWeight: 600,
         outline: "none",
-        boxShadow: "none"
+        boxShadow: "none",
+        width: fullWidth ? "100%" : undefined
       }}
     >
       {children}

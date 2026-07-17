@@ -435,7 +435,7 @@
     const hasApprovedReviews = publicReviews.length > 0;
     const breakdown = buildRatingBreakdown(publicReviews);
     const totalBreakdown = Math.max(Object.values(breakdown).reduce((total, count) => total + Number(count || 0), 0), 1);
-    const layoutType = ["standard", "cards", "carousel"].includes(settings.layoutType) ? settings.layoutType : "standard";
+    const layoutType = ["standard", "cards", "carousel", "sidebar"].includes(settings.layoutType) ? settings.layoutType : "standard";
     const layoutClass = `fbr-layout-${layoutType}`;
     el.style.setProperty("--fbr-star", settings.starColor);
     el.style.setProperty("--fbr-primary", settings.buttonBackgroundColor);
@@ -456,6 +456,8 @@
     el.style.maxWidth = "none";
     el.innerHTML = `
       <div class="fbr-product-reviews-card ${layoutClass}" style="--fbr-widget-border-width:${widgetBorderWidth}px; --fbr-widget-border-color:${escapeAttr(settings.borderColor)}; --fbr-widget-border-radius:${widgetBorderRadius}px; --fbr-widget-background:${escapeAttr(settings.widgetBackgroundColor)}; background:${escapeAttr(settings.widgetBackgroundColor)} !important; border:${widgetBorderWidth}px solid ${escapeAttr(settings.borderColor)} !important; border-radius:${widgetBorderRadius}px !important;">
+        <div class="fbr-layout-shell">
+        <aside class="fbr-sidebar-panel">
         <div class="fbr-product-review-header">
           <div class="fbr-review-title-row">
             <h3>Customer Reviews</h3>
@@ -523,6 +525,8 @@
             ` : ""}
           </div>
         ` : ""}
+        </aside>
+        <main class="fbr-review-main-panel">
         <div class="fbr-widget-tabs-row">
           <div class="fbr-widget-tabs" role="tablist" aria-label="Product reviews and questions">
             <button type="button" class="fbr-widget-tab fbr-widget-tab-active" data-fbr-tab="reviews" role="tab" aria-selected="true">Reviews (${Number(data.reviewCount) || reviews.length})</button>
@@ -595,6 +599,8 @@
             `}
           </div>
         </section>
+        </main>
+        </div>
       </div>
       ${settings.showWriteReviewButton ? renderReviewModal(el, settings) : ""}
       ${settings.showAskQuestionButton ? renderQuestionModal(el, settings) : ""}

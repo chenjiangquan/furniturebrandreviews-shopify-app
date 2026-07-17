@@ -4,11 +4,15 @@ import {
   getProductReviewWidgetSettings,
   requiredString
 } from "~/models/reviews.server";
+import { getShopEntitlements } from "~/models/entitlements.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const shop = requiredString(url.searchParams.get("shop"), "shop");
-  const settings = await getProductReviewWidgetSettings(shop);
+  const [settings, entitlements] = await Promise.all([
+    getProductReviewWidgetSettings(shop),
+    getShopEntitlements(shop)
+  ]);
 
   return corsJson({
     productReviewsEnabled: settings.productReviewsEnabled,
@@ -63,7 +67,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     showPhotoSummary: settings.showPhotoSummary,
     photoSummaryLimit: settings.photoSummaryLimit,
     showReviewerPhotos: settings.showReviewerPhotos,
-    layoutType: settings.layoutType,
+    layoutType: entitlements.isPro ? settings.layoutType : "standard",
     carouselCardsPerRow: settings.carouselCardsPerRow,
     carouselAutoSlide: settings.carouselAutoSlide,
     carouselAutoplaySpeed: settings.carouselAutoplaySpeed,

@@ -387,7 +387,7 @@ const planRows: ReadonlyArray<readonly [string, PlanCellValue, PlanCellValue]> =
   ["Questions & Answers", true, true],
   ["Google and SEO", false, true],
   ["AI review summary", false, true],
-  ["Carousel layout", false, true],
+  ["Cards, carousel & sidebar layouts", false, true],
   ["Priority support", false, true],
   ["Unlimited Review", "50 reviews/month", true],
   ["Delete Review", "5 reviews/month", true]
