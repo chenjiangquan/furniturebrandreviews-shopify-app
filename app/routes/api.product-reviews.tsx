@@ -75,7 +75,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     verifiedPurchase: false,
     source: "STOREFRONT"
   });
-  void sendReviewNotification(shopDomain, review);
+  await sendReviewNotification(shopDomain, review);
 
   return corsJson({
     ok: true,

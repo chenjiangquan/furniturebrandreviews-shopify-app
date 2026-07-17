@@ -40,7 +40,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     question: requiredString(payload.question, "question"),
     status: settings?.autoApproveReviews ? "PUBLISHED" : "PENDING"
   });
-  void sendQuestionNotification(shopDomain, question);
+  // Await the provider request so serverless runtimes do not terminate the
+  // invocation before the notification has actually been handed to Resend.
+  await sendQuestionNotification(shopDomain, question);
 
   return corsJson({
     ok: true,

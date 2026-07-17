@@ -23,7 +23,7 @@ import prisma from "~/db.server";
 import { clampRating, createProductReview, ensureShop, requiredString } from "~/models/reviews.server";
 import { authenticate } from "~/shopify.server";
 
-type QuestionStatus = "PENDING" | "PUBLISHED" | "REJECTED" | "ARCHIVED";
+type QuestionStatus = "PENDING" | "PUBLISHED";
 
 const tabs = [
   { id: "all", content: "All Reviews" }
@@ -36,9 +36,7 @@ const viewTabs = [
 
 const questionStatusOptions = [
   { label: "Published", value: "PUBLISHED" },
-  { label: "Pending", value: "PENDING" },
-  { label: "Rejected", value: "REJECTED" },
-  { label: "Archived", value: "ARCHIVED" }
+  { label: "Pending", value: "PENDING" }
 ];
 
 const pageSizeOptions = [20, 30];
@@ -159,9 +157,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "questionStatus") {
+    const requestedStatus = String(form.get("status") || "PENDING");
+    const status: QuestionStatus = requestedStatus === "PUBLISHED" ? "PUBLISHED" : "PENDING";
     await prisma.productQuestion.update({
       where: { id },
-      data: { status: String(form.get("status") || "PENDING") as QuestionStatus }
+      data: { status }
     });
   }
 
