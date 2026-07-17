@@ -14,6 +14,9 @@ export type ShopEntitlements = {
   isPro: boolean;
 };
 
+const BILLING_STATUS_CACHE_TTL_MS = 60_000;
+const billingStatusSyncs = new Map<string, Promise<ShopEntitlements>>();
+
 export class PlanLimitError extends Error {
   status = 429;
 
@@ -25,12 +28,36 @@ export class PlanLimitError extends Error {
 
 export async function syncAdminEntitlements(shopDomain: string, billing: any): Promise<ShopEntitlements> {
   if (isFreeProShop(shopDomain)) {
-    await persistPlan(shopDomain, "PRO");
+    const persisted = await getPersistedShopEntitlements(shopDomain);
+    if (persisted.entitlements.plan !== "PRO") await persistPlan(shopDomain, "PRO");
     return { plan: "PRO", planSource: "FREE_PARTNER", isPro: true };
   }
 
-  const persistedEntitlements = await getShopEntitlements(shopDomain);
+  const persisted = await getPersistedShopEntitlements(shopDomain);
+  if (
+    persisted.checkedAt &&
+    Date.now() - persisted.checkedAt.getTime() < BILLING_STATUS_CACHE_TTL_MS
+  ) {
+    return persisted.entitlements;
+  }
 
+  const existingSync = billingStatusSyncs.get(shopDomain);
+  if (existingSync) return existingSync;
+
+  const sync = syncBillingStatus(shopDomain, billing, persisted.entitlements);
+  billingStatusSyncs.set(shopDomain, sync);
+  try {
+    return await sync;
+  } finally {
+    if (billingStatusSyncs.get(shopDomain) === sync) billingStatusSyncs.delete(shopDomain);
+  }
+}
+
+async function syncBillingStatus(
+  shopDomain: string,
+  billing: any,
+  persistedEntitlements: ShopEntitlements
+): Promise<ShopEntitlements> {
   try {
     const check = await billing.check({ plans: [PRO_PLAN], isTest: isBillingTestMode() });
     const plan: AppPlan = check.hasActivePayment ? "PRO" : "FREE";
@@ -61,16 +88,23 @@ export async function getShopEntitlements(shopDomain: string): Promise<ShopEntit
     return { plan: "PRO", planSource: "FREE_PARTNER", isPro: true };
   }
 
+  return (await getPersistedShopEntitlements(shopDomain)).entitlements;
+}
+
+async function getPersistedShopEntitlements(shopDomain: string) {
   const subscription = await prisma.subscriptionSettings.findUnique({
     where: { shopDomain },
-    select: { plan: true }
+    select: { plan: true, updatedAt: true }
   });
   const plan: AppPlan = subscription?.plan === "PRO" ? "PRO" : "FREE";
 
   return {
-    plan,
-    planSource: plan === "PRO" ? "BILLING" : "FREE",
-    isPro: plan === "PRO"
+    entitlements: {
+      plan,
+      planSource: plan === "PRO" ? "BILLING" as const : "FREE" as const,
+      isPro: plan === "PRO"
+    },
+    checkedAt: subscription?.updatedAt || null
   };
 }
 

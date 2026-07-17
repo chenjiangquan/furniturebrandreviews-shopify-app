@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { useFetcher, useLoaderData } from "@remix-run/react";
+import { useFetcher, useLoaderData, useNavigate, type ShouldRevalidateFunctionArgs } from "@remix-run/react";
 import * as React from "react";
 import {
   Badge,
@@ -19,9 +19,8 @@ import {
   TextField
 } from "@shopify/polaris";
 import prisma from "~/db.server";
-import { syncAdminEntitlements } from "~/models/entitlements.server";
+import { getShopEntitlements } from "~/models/entitlements.server";
 import { sendTestNotificationEmail, syncShopContactFromShopify } from "~/models/notifications.server";
-import { getProductReviewWidgetSettings } from "~/models/reviews.server";
 import { authenticate } from "~/shopify.server";
 
 type BrandTrustWidget = {
@@ -82,9 +81,9 @@ const WHATSAPP_SUPPORT_URL = "https://wa.me/447521530350";
 const CLAIM_PROFILE_URL = "https://www.furniturebrandreviews.com/claim-your-profile";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { billing, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
-  const entitlements = await syncAdminEntitlements(shopDomain, billing);
+  const entitlements = await getShopEntitlements(shopDomain);
   let widgetSettings = {
     brandName: defaultBrandProfile.brandName,
     brandSlug: defaultBrandProfile.brandSlug,
@@ -103,8 +102,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     questionEmailNotificationsEnabled: true
   };
   try {
-    const [, loadedWidgetSettings, loadedGoogleSeoSettings, loadedShop] = await Promise.all([
-      getProductReviewWidgetSettings(shopDomain),
+    const [loadedWidgetSettings, loadedGoogleSeoSettings, loadedShop] = await Promise.all([
       prisma.widgetSettings.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } }),
       prisma.googleSeoSettings.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } }),
       prisma.shop.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } })
@@ -164,15 +162,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { billing, session } = await authenticate.admin(request);
-  const entitlements = await syncAdminEntitlements(session.shop, billing);
+  const { session } = await authenticate.admin(request);
+  const entitlements = await getShopEntitlements(session.shop);
   const form = await request.formData();
   const intent = String(form.get("intent") || "");
 
   if (intent === "saveNotificationSettings" || intent === "sendTestEmail") {
     const notificationEmail = String(form.get("notificationEmail") || "").trim();
-    const reviewEmailNotificationsEnabled = form.get("reviewEmailNotificationsEnabled") === "on";
-    const questionEmailNotificationsEnabled = form.get("questionEmailNotificationsEnabled") === "on";
+    const reviewEmailNotificationsEnabled = booleanFromForm(form, "reviewEmailNotificationsEnabled");
+    const questionEmailNotificationsEnabled = booleanFromForm(form, "questionEmailNotificationsEnabled");
 
     await prisma.shop.upsert({
       where: { shopDomain: session.shop },
@@ -205,7 +203,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    return { ok: true, id: "", error: "", message: "Notification settings saved.", brandProfile: null };
+    return {
+      ok: true,
+      id: "",
+      error: "",
+      message: "Notification settings saved.",
+      brandProfile: null,
+      notificationSettings: {
+        notificationEmail,
+        reviewEmailNotificationsEnabled,
+        questionEmailNotificationsEnabled
+      }
+    };
   }
 
   if (intent !== "saveBrandProfile") {
@@ -251,6 +260,7 @@ export default function WidgetsSettings() {
   const { entitlements, googleSeoInstalled, productThemeEditorUrl, homeThemeEditorUrl, productLiquidUrl, brandProfile, notificationSettings, appUrl } = useLoaderData<typeof loader>();
   const brandFetcher = useFetcher<typeof action>();
   const notificationFetcher = useFetcher<typeof action>();
+  const navigate = useNavigate();
   const [manualWidget, setManualWidget] = React.useState<ManualInstallWidget | null>(null);
   const [brandName, setBrandName] = React.useState(brandProfile.brandName);
   const [notificationEmail, setNotificationEmail] = React.useState(notificationSettings.notificationEmail);
@@ -260,6 +270,16 @@ export default function WidgetsSettings() {
     ? brandFetcher.data.brandProfile
     : brandProfile;
   const brandSlug = savedBrandProfile.brandSlug;
+
+  React.useEffect(() => {
+    const saved = notificationFetcher.data && "notificationSettings" in notificationFetcher.data
+      ? notificationFetcher.data.notificationSettings
+      : null;
+    if (!saved) return;
+    setNotificationEmail(saved.notificationEmail);
+    setReviewEmailNotificationsEnabled(saved.reviewEmailNotificationsEnabled);
+    setQuestionEmailNotificationsEnabled(saved.questionEmailNotificationsEnabled);
+  }, [notificationFetcher.data]);
 
   return (
     <Page
@@ -281,7 +301,7 @@ export default function WidgetsSettings() {
                   })}>
                     Manual install
                   </Button>
-                  <Button url={widget.customizeUrl} variant="primary">Customize</Button>
+                  <Button onClick={() => navigate(widget.customizeUrl)} variant="primary">Customize</Button>
                 </ButtonGroup>
               </WidgetCard>
             );
@@ -434,7 +454,7 @@ export default function WidgetsSettings() {
             <Badge tone={entitlements.isPro && googleSeoInstalled ? "success" : "attention"}>
               {!entitlements.isPro ? "Pro" : googleSeoInstalled ? "Installed" : "Settings only"}
             </Badge>
-            <Button url={entitlements.isPro ? "/app/google-seo" : "/app"} variant="primary">
+            <Button onClick={() => navigate(entitlements.isPro ? "/app/google-seo" : "/app")} variant="primary">
               {entitlements.isPro ? "Manage" : "Upgrade to Pro"}
             </Button>
           </WidgetCard>
@@ -448,6 +468,15 @@ export default function WidgetsSettings() {
       </BlockStack>
     </Page>
   );
+}
+
+export const shouldRevalidate = ({ formMethod, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) =>
+  formMethod ? false : defaultShouldRevalidate;
+
+function booleanFromForm(form: FormData, name: string) {
+  const value = form.get(name);
+  if (value === null) return false;
+  return ["on", "true", "1", "yes"].includes(String(value).toLowerCase());
 }
 
 function WidgetSection({ title, children }: { title: string; children: React.ReactNode }) {

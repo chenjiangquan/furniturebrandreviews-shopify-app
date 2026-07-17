@@ -1,5 +1,6 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { redirect } from "@remix-run/node";
+import { useNavigate } from "@remix-run/react";
 import {
   Badge,
   BlockStack,
@@ -15,22 +16,23 @@ import {
 import * as React from "react";
 import { getBrandWidgetPayload } from "~/models/reviews.server";
 import { authenticate } from "~/shopify.server";
-import { syncAdminEntitlements } from "~/models/entitlements.server";
+import { getShopEntitlements } from "~/models/entitlements.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { billing, session } = await authenticate.admin(request);
-  const entitlements = await syncAdminEntitlements(session.shop, billing);
+  const { session } = await authenticate.admin(request);
+  const entitlements = await getShopEntitlements(session.shop);
   if (!entitlements.isPro) throw redirect("/app/widgets-settings");
   return getBrandWidgetPayload(session.shop);
 };
 
 export default function BrandReviewCarouselCustomize() {
+  const navigate = useNavigate();
   const [primaryColor, setPrimaryColor] = React.useState("#1f6f64");
   const [starColor, setStarColor] = React.useState("#f5a623");
   const [layout, setLayout] = React.useState("carousel");
 
   return (
-    <Page fullWidth title="Brand Review Carousel" backAction={{ content: "Widgets Settings", url: "/app/widgets-settings" }}>
+    <Page fullWidth title="Brand Review Carousel" backAction={{ content: "Widgets Settings", onAction: () => navigate("/app/widgets-settings") }}>
       <InlineGrid columns={{ xs: 1, md: "360px 1fr" }} gap="500">
         <Card>
           <BlockStack gap="300">
@@ -42,7 +44,7 @@ export default function BrandReviewCarouselCustomize() {
               { label: "Compact", value: "compact" },
               { label: "Grid", value: "grid" }
             ]} />
-            <Button url="/app/widgets-settings" variant="primary">Done</Button>
+            <Button onClick={() => navigate("/app/widgets-settings")} variant="primary">Done</Button>
           </BlockStack>
         </Card>
 

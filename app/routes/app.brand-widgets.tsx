@@ -1,20 +1,21 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { redirect } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import { useLoaderData, useNavigate } from "@remix-run/react";
 import { Badge, BlockStack, Button, Card, InlineGrid, InlineStack, Page, Text } from "@shopify/polaris";
 import { getBrandWidgetPayload } from "~/models/reviews.server";
 import { authenticate } from "~/shopify.server";
-import { syncAdminEntitlements } from "~/models/entitlements.server";
+import { getShopEntitlements } from "~/models/entitlements.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { billing, session } = await authenticate.admin(request);
-  const entitlements = await syncAdminEntitlements(session.shop, billing);
+  const { session } = await authenticate.admin(request);
+  const entitlements = await getShopEntitlements(session.shop);
   if (!entitlements.isPro) throw redirect("/app/widgets-settings");
   return getBrandWidgetPayload(session.shop);
 };
 
 export default function BrandWidgets() {
   const data = useLoaderData<typeof loader>();
+  const navigate = useNavigate();
   const breakdown = data.ratingBreakdown || {};
 
   return (
@@ -29,7 +30,7 @@ export default function BrandWidgets() {
             <Text as="p" tone="subdued">
               Configure the product page review widget and preview storefront styling before adding the app block in the Theme Editor.
             </Text>
-            <Button url="/app/widgets/product-review-widget" variant="primary">Customize Product Review Widget</Button>
+            <Button onClick={() => navigate("/app/widgets/product-review-widget")} variant="primary">Customize Product Review Widget</Button>
           </BlockStack>
         </Card>
 

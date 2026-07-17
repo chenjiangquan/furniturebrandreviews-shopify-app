@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
+import { useFetcher, useLoaderData, useNavigate, type ShouldRevalidateFunctionArgs } from "@remix-run/react";
 import * as React from "react";
 import {
   Badge,
@@ -12,12 +12,12 @@ import {
   Text
 } from "@shopify/polaris";
 import prisma from "~/db.server";
-import { syncAdminEntitlements } from "~/models/entitlements.server";
+import { getShopEntitlements } from "~/models/entitlements.server";
 import { authenticate } from "~/shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { billing, session } = await authenticate.admin(request);
-  const entitlements = await syncAdminEntitlements(session.shop, billing);
+  const { session } = await authenticate.admin(request);
+  const entitlements = await getShopEntitlements(session.shop);
   const settings = await prisma.googleSeoSettings.upsert({
     where: { shopDomain: session.shop },
     update: {},
@@ -28,8 +28,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { billing, session } = await authenticate.admin(request);
-  const entitlements = await syncAdminEntitlements(session.shop, billing);
+  const { session } = await authenticate.admin(request);
+  const entitlements = await getShopEntitlements(session.shop);
   if (!entitlements.isPro) {
     return { ok: false, error: "Google and SEO settings require the Pro plan." };
   }
@@ -142,6 +142,9 @@ export default function GoogleSeoSettings() {
     </Page>
   );
 }
+
+export const shouldRevalidate = ({ formMethod, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) =>
+  formMethod ? false : defaultShouldRevalidate;
 
 function SettingRow({
   title,

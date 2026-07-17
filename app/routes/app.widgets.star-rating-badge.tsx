@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { useFetcher, useLoaderData } from "@remix-run/react";
+import { useFetcher, useLoaderData, useNavigate, type ShouldRevalidateFunctionArgs } from "@remix-run/react";
 import {
   Badge,
   BlockStack,
@@ -60,6 +60,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function StarRatingBadgeCustomize() {
   const { settings } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
+  const navigate = useNavigate();
   const [starColor, setStarColor] = React.useState(settings.starRatingBadgeStarColor);
   const [textColor, setTextColor] = React.useState(settings.starRatingBadgeTextColor);
   const [backgroundColor, setBackgroundColor] = React.useState(settings.starRatingBadgeBackgroundColor);
@@ -70,7 +71,7 @@ export default function StarRatingBadgeCustomize() {
   const saving = fetcher.state !== "idle";
 
   return (
-    <Page fullWidth title="Star Rating Badge" backAction={{ content: "Widgets Settings", url: "/app/widgets-settings" }}>
+    <Page fullWidth title="Star Rating Badge" backAction={{ content: "Widgets Settings", onAction: () => navigate("/app/widgets-settings") }}>
       <InlineGrid columns={{ xs: 1, md: "360px 1fr" }} gap="500">
         <fetcher.Form method="post">
           <Card>
@@ -111,6 +112,9 @@ export default function StarRatingBadgeCustomize() {
     </Page>
   );
 }
+
+export const shouldRevalidate = ({ formMethod, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) =>
+  formMethod ? false : defaultShouldRevalidate;
 
 function ColorField({ label, name, value, onChange }: { label: string; name: string; value: string; onChange: (value: string) => void }) {
   const [active, setActive] = React.useState(false);

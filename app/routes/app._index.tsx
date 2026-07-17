@@ -66,42 +66,8 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<Dashboard
 };
 
 async function getDashboardReviewStats(shopDomain: string) {
-  const candidateDomains = await dashboardReviewShopDomains(shopDomain);
-  return countReviewsForShopDomains(candidateDomains);
-}
-
-async function dashboardReviewShopDomains(shopDomain: string) {
-  const normalizedShop = normalizeShopDomain(shopDomain);
-  const reviewDomains = await prisma.productReview.findMany({
-    distinct: ["shopDomain"],
-    select: { shopDomain: true }
-  });
-  const sessionDomains = await prisma.session.findMany({
-    distinct: ["shop"],
-    select: { shop: true }
-  });
-  const candidates = new Set<string>([shopDomain]);
-
-  for (const row of [...reviewDomains, ...sessionDomains.map((session) => ({ shopDomain: session.shop }))]) {
-    if (normalizeShopDomain(row.shopDomain) === normalizedShop) {
-      candidates.add(row.shopDomain);
-    }
-  }
-
-  return [...candidates];
-}
-
-async function countReviewsForShopDomains(shopDomains: string[]) {
-  const totalReviews = await prisma.productReview.count({ where: { shopDomain: { in: shopDomains } } });
+  const totalReviews = await prisma.productReview.count({ where: { shopDomain } });
   return { totalReviews };
-}
-
-function normalizeShopDomain(shopDomain: string) {
-  return shopDomain
-    .toLowerCase()
-    .replace(/^https?:\/\//, "")
-    .replace(/\/.*$/, "")
-    .trim();
 }
 
 export const action = async ({ request }: ActionFunctionArgs) => {

@@ -24,9 +24,9 @@ import {
   currentPlanMonthKey,
   deleteProductReviewWithPlanLimit,
   FREE_MONTHLY_IMPORT_LIMIT,
+  getShopEntitlements,
   getMonthlyPlanUsage,
-  PlanLimitError,
-  syncAdminEntitlements
+  PlanLimitError
 } from "~/models/entitlements.server";
 import { clampRating, createProductReview, ensureShop, requiredString } from "~/models/reviews.server";
 import { authenticate } from "~/shopify.server";
@@ -46,8 +46,8 @@ const questionStatusOptions = [
 const pageSizeOptions = [20, 30];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { billing, session } = await authenticate.admin(request);
-  const entitlements = await syncAdminEntitlements(session.shop, billing);
+  const { session } = await authenticate.admin(request);
+  const entitlements = await getShopEntitlements(session.shop);
   const url = new URL(request.url);
   const query = (url.searchParams.get("q") || "").trim();
   const rating = url.searchParams.get("rating") || "";
@@ -128,8 +128,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { billing, session } = await authenticate.admin(request);
-  const entitlements = await syncAdminEntitlements(session.shop, billing);
+  const { session } = await authenticate.admin(request);
+  const entitlements = await getShopEntitlements(session.shop);
   const form = await request.formData();
   const intent = String(form.get("intent"));
   const id = String(form.get("id") || "");

@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { useFetcher, useLoaderData } from "@remix-run/react";
+import { useFetcher, useLoaderData, useNavigate, type ShouldRevalidateFunctionArgs } from "@remix-run/react";
 import * as React from "react";
 import {
   Badge,
@@ -21,7 +21,7 @@ import {
 } from "@shopify/polaris";
 import { Prisma } from "@prisma/client";
 import prisma from "~/db.server";
-import { syncAdminEntitlements } from "~/models/entitlements.server";
+import { getShopEntitlements } from "~/models/entitlements.server";
 import { defaultProductReviewWidgetSettings } from "~/models/product-review-widget-settings";
 import { getProductReviewWidgetSettings } from "~/models/reviews.server";
 import { authenticate } from "~/shopify.server";
@@ -102,8 +102,8 @@ const textFields = [
 ] as const;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { billing, session } = await authenticate.admin(request);
-  const entitlements = await syncAdminEntitlements(session.shop, billing);
+  const { session } = await authenticate.admin(request);
+  const entitlements = await getShopEntitlements(session.shop);
   const settings = await getProductReviewWidgetSettings(session.shop);
   return {
     entitlements,
@@ -112,8 +112,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { billing, session } = await authenticate.admin(request);
-  const entitlements = await syncAdminEntitlements(session.shop, billing);
+  const { session } = await authenticate.admin(request);
+  const entitlements = await getShopEntitlements(session.shop);
   const form = await request.formData();
   const shopDomain = session.shop;
   await prisma.shop.upsert({
@@ -202,6 +202,7 @@ function sliderNumber(value: number | [number, number]) {
 export default function ProductReviewWidgetSettings() {
   const { entitlements, settings } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
+  const navigate = useNavigate();
   const [draft, setDraft] = React.useState<WidgetSettings>(normalizeWidgetSettings({
     ...defaultProductReviewWidgetSettings,
     ...settings
@@ -234,7 +235,7 @@ export default function ProductReviewWidgetSettings() {
       fullWidth
       title="Product Review Widget"
       subtitle="Customize the Theme App Extension block without editing theme code."
-      backAction={{ content: "Widgets Settings", url: "/app/widgets-settings" }}
+      backAction={{ content: "Widgets Settings", onAction: () => navigate("/app/widgets-settings") }}
     >
       <fetcher.Form method="post">
         <HiddenSettings settings={draft} />
@@ -411,6 +412,9 @@ export default function ProductReviewWidgetSettings() {
     </Page>
   );
 }
+
+export const shouldRevalidate = ({ formMethod, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) =>
+  formMethod ? false : defaultShouldRevalidate;
 
 function normalizeWidgetSettings(settings: WidgetSettings): WidgetSettings {
   const layoutType =
