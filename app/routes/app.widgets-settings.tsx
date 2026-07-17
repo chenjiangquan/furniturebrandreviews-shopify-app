@@ -121,7 +121,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Widgets Settings loader failed; rendering fallback UI", error);
   }
 
-  const themeEditorUrl = `https://${session.shop}/admin/themes/current/editor?template=product`;
+  const productThemeEditorUrl = `https://${session.shop}/admin/themes/current/editor?template=product`;
+  const homeThemeEditorUrl = `https://${session.shop}/admin/themes/current/editor?template=index`;
   const productLiquidUrl = `https://${session.shop}/admin/themes/current?key=templates/product.liquid`;
   const appUrl = (process.env.SHOPIFY_APP_URL || "https://app.furniturebrandreviews.com").replace(/\/$/, "");
   const brandSlug = widgetSettings.brandSlug || brandSlugFromProfileUrl(widgetSettings.profileUrl) || "";
@@ -133,7 +134,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return {
     googleSeoInstalled,
-    themeEditorUrl,
+    productThemeEditorUrl,
+    homeThemeEditorUrl,
     productLiquidUrl,
     brandProfile: {
       brandName: widgetSettings.brandName || "",
@@ -230,7 +232,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function WidgetsSettings() {
-  const { googleSeoInstalled, themeEditorUrl, productLiquidUrl, brandProfile, notificationSettings, appUrl } = useLoaderData<typeof loader>();
+  const { googleSeoInstalled, productThemeEditorUrl, homeThemeEditorUrl, productLiquidUrl, brandProfile, notificationSettings, appUrl } = useLoaderData<typeof loader>();
   const brandFetcher = useFetcher<typeof action>();
   const notificationFetcher = useFetcher<typeof action>();
   const [manualWidget, setManualWidget] = React.useState<ManualInstallWidget | null>(null);
@@ -255,7 +257,7 @@ export default function WidgetsSettings() {
             return (
               <WidgetCard key={widget.title} title={widget.title} description={widget.description} image={widget.image}>
                 <ButtonGroup>
-                  <Button url={themeEditorUrl} target="_blank">Install</Button>
+                  <Button url={productThemeEditorUrl} target="_blank">Install</Button>
                   <Button onClick={() => setManualWidget({
                     title: widget.title,
                     code: buildProductManualInstallCode(appUrl, widget.key),
@@ -358,7 +360,7 @@ export default function WidgetsSettings() {
             >
               {!canInstall ? <Text as="p" tone="critical">Enter your brand name before installing this widget.</Text> : null}
               <ButtonGroup>
-                <Button url={themeEditorUrl} target="_blank" disabled={!canInstall}>Install</Button>
+                <Button url={homeThemeEditorUrl} target="_blank" disabled={!canInstall}>Install</Button>
                 <Button
                   onClick={() => setManualWidget({
                     title: widget.title,
@@ -459,7 +461,7 @@ function BrandWidgetInstallInstructions() {
         <strong>Online Store 2.0 / JSON theme:</strong> click <strong>Install</strong>, then go to <strong>Add section → Apps</strong> and choose this widget.
       </Text>
       <Text as="p" tone="subdued">
-        <strong>Legacy Liquid theme:</strong> click <strong>Manual install</strong>, copy the code, then paste it into a <strong>Custom Liquid/HTML</strong> section or the theme file where you want it displayed.
+        <strong>Legacy Liquid theme:</strong> click <strong>Install</strong>, then go to <strong>Add section → Sections</strong> and choose this widget. If it is not listed, click <strong>Manual install</strong> and add the code to a <strong>Custom Liquid/HTML</strong> section or theme file.
       </Text>
     </BlockStack>
   );
