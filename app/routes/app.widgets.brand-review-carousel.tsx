@@ -1,4 +1,5 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
+import { redirect } from "@remix-run/node";
 import {
   Badge,
   BlockStack,
@@ -14,9 +15,12 @@ import {
 import * as React from "react";
 import { getBrandWidgetPayload } from "~/models/reviews.server";
 import { authenticate } from "~/shopify.server";
+import { syncAdminEntitlements } from "~/models/entitlements.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
+  const entitlements = await syncAdminEntitlements(session.shop, billing);
+  if (!entitlements.isPro) throw redirect("/app/widgets-settings");
   return getBrandWidgetPayload(session.shop);
 };
 

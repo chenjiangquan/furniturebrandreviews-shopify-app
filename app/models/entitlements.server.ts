@@ -1,0 +1,146 @@
+import prisma from "~/db.server";
+import { PRO_PLAN } from "~/models/billing-plans";
+import { isBillingTestMode, isFreeProShop } from "~/shopify.server";
+
+export const FREE_MONTHLY_REVIEW_LIMIT = 50;
+export const FREE_MONTHLY_DELETE_LIMIT = 5;
+
+export type AppPlan = "FREE" | "PRO";
+export type PlanSource = "FREE" | "BILLING" | "FREE_PARTNER";
+
+export type ShopEntitlements = {
+  plan: AppPlan;
+  planSource: PlanSource;
+  isPro: boolean;
+};
+
+export class PlanLimitError extends Error {
+  status = 429;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "PlanLimitError";
+  }
+}
+
+export async function syncAdminEntitlements(shopDomain: string, billing: any): Promise<ShopEntitlements> {
+  if (isFreeProShop(shopDomain)) {
+    await persistPlan(shopDomain, "PRO");
+    return { plan: "PRO", planSource: "FREE_PARTNER", isPro: true };
+  }
+
+  const check = await billing.check({ plans: [PRO_PLAN], isTest: isBillingTestMode() });
+  const plan: AppPlan = check.hasActivePayment ? "PRO" : "FREE";
+  await persistPlan(shopDomain, plan);
+
+  return {
+    plan,
+    planSource: plan === "PRO" ? "BILLING" : "FREE",
+    isPro: plan === "PRO"
+  };
+}
+
+export async function getShopEntitlements(shopDomain: string): Promise<ShopEntitlements> {
+  if (isFreeProShop(shopDomain)) {
+    return { plan: "PRO", planSource: "FREE_PARTNER", isPro: true };
+  }
+
+  const subscription = await prisma.subscriptionSettings.findUnique({
+    where: { shopDomain },
+    select: { plan: true }
+  });
+  const plan: AppPlan = subscription?.plan === "PRO" ? "PRO" : "FREE";
+
+  return {
+    plan,
+    planSource: plan === "PRO" ? "BILLING" : "FREE",
+    isPro: plan === "PRO"
+  };
+}
+
+export async function getMonthlyPlanUsage(shopDomain: string, now = new Date()) {
+  const { start, end, monthKey } = calendarMonth(now);
+  const [reviewSubmissions, usage] = await Promise.all([
+    prisma.productReview.count({
+      where: {
+        shopDomain,
+        source: "STOREFRONT",
+        createdAt: { gte: start, lt: end }
+      }
+    }),
+    prisma.monthlyPlanUsage.findUnique({
+      where: { shopDomain_monthKey: { shopDomain, monthKey } },
+      select: { reviewDeletions: true }
+    })
+  ]);
+
+  return {
+    monthKey,
+    reviewSubmissions,
+    reviewDeletions: usage?.reviewDeletions || 0,
+    reviewLimit: FREE_MONTHLY_REVIEW_LIMIT,
+    deleteLimit: FREE_MONTHLY_DELETE_LIMIT
+  };
+}
+
+export async function assertCanSubmitStorefrontReview(shopDomain: string) {
+  const entitlements = await getShopEntitlements(shopDomain);
+  if (entitlements.isPro) return;
+
+  const usage = await getMonthlyPlanUsage(shopDomain);
+  if (usage.reviewSubmissions >= FREE_MONTHLY_REVIEW_LIMIT) {
+    throw new PlanLimitError(
+      `This store has reached the Free plan limit of ${FREE_MONTHLY_REVIEW_LIMIT} customer reviews this month. Please ask the store owner to upgrade to Pro.`
+    );
+  }
+}
+
+export async function deleteProductReviewWithPlanLimit(shopDomain: string, reviewId: string) {
+  const entitlements = await getShopEntitlements(shopDomain);
+  if (entitlements.isPro) {
+    const deleted = await prisma.productReview.deleteMany({ where: { id: reviewId, shopDomain } });
+    if (!deleted.count) throw new Response("Review not found.", { status: 404 });
+    return;
+  }
+
+  const { monthKey } = calendarMonth(new Date());
+  await prisma.$transaction(async (tx) => {
+    await tx.monthlyPlanUsage.upsert({
+      where: { shopDomain_monthKey: { shopDomain, monthKey } },
+      update: {},
+      create: { shopDomain, monthKey }
+    });
+    const consumed = await tx.monthlyPlanUsage.updateMany({
+      where: {
+        shopDomain,
+        monthKey,
+        reviewDeletions: { lt: FREE_MONTHLY_DELETE_LIMIT }
+      },
+      data: { reviewDeletions: { increment: 1 } }
+    });
+    if (!consumed.count) {
+      throw new PlanLimitError(
+        `You have reached the Free plan limit of ${FREE_MONTHLY_DELETE_LIMIT} deleted reviews this month. Upgrade to Pro for unlimited deletions.`
+      );
+    }
+
+    const deleted = await tx.productReview.deleteMany({ where: { id: reviewId, shopDomain } });
+    if (!deleted.count) throw new Response("Review not found.", { status: 404 });
+  });
+}
+
+function calendarMonth(now: Date) {
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  return { start, end, monthKey };
+}
+
+async function persistPlan(shopDomain: string, plan: AppPlan) {
+  await prisma.shop.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } });
+  await prisma.subscriptionSettings.upsert({
+    where: { shopDomain },
+    update: { plan },
+    create: { shopDomain, plan }
+  });
+}

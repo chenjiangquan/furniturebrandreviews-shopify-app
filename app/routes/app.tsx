@@ -3,9 +3,13 @@ import { Link, Outlet, useRouteError } from "@remix-run/react";
 import { NavMenu } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { authenticate } from "~/shopify.server";
+import { syncAdminEntitlements } from "~/models/entitlements.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
+  await syncAdminEntitlements(session.shop, billing).catch((error) => {
+    console.error("Failed to sync app entitlements", error);
+  });
   return null;
 };
 

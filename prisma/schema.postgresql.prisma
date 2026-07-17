@@ -51,6 +51,7 @@ model Shop {
   productReviewSettings ProductReviewSettings?
   googleSeoSettings    GoogleSeoSettings?
   subscriptionSettings SubscriptionSettings?
+  monthlyPlanUsage     MonthlyPlanUsage[]
   brandReviews         BrandReview[]
   productReviews       ProductReview[]
   productQuestions     ProductQuestion[]
@@ -266,4 +267,18 @@ model SubscriptionSettings {
   updatedAt  DateTime @updatedAt
 
   shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
+}
+
+model MonthlyPlanUsage {
+  id              String   @id @default(cuid())
+  shopDomain      String
+  monthKey        String
+  reviewDeletions Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
+
+  @@unique([shopDomain, monthKey])
+  @@index([shopDomain, monthKey])
 }

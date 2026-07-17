@@ -1,5 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import prisma from "~/db.server";
+import { assertCanSubmitStorefrontReview, getShopEntitlements, PlanLimitError } from "~/models/entitlements.server";
 import { sendReviewNotification } from "~/models/notifications.server";
 import {
   clampRating,
@@ -21,17 +22,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     throw new Response("productId, productHandle, or productTitle is required.", { status: 400 });
   }
   if (url.searchParams.get("summaryOnly") === "1") {
-    const [summary, settings, googleSeoSettings] = await Promise.all([
+    const [summary, settings, googleSeoSettings, entitlements] = await Promise.all([
       getProductReviewRatingSummary(shop, productId, productHandle, productTitle),
       getProductReviewWidgetSettings(shop),
       prisma.googleSeoSettings.findUnique({
         where: { shopDomain: shop },
         select: { seoRichSnippetsEnabled: true }
-      })
+      }),
+      getShopEntitlements(shop)
     ]);
     return corsJson({
       ...summary,
-      seoRichSnippetsEnabled: googleSeoSettings?.seoRichSnippetsEnabled || false,
+      seoRichSnippetsEnabled: entitlements.isPro && Boolean(googleSeoSettings?.seoRichSnippetsEnabled),
       starRatingBadgeSettings: {
         starColor: settings.starRatingBadgeStarColor,
         textColor: settings.starRatingBadgeTextColor,
@@ -46,18 +48,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     });
   }
-  const [summary, settings, googleSeoSettings] = await Promise.all([
+  const [summary, settings, googleSeoSettings, entitlements] = await Promise.all([
     getProductReviewSummary(shop, productId, productHandle, productTitle),
     getProductReviewWidgetSettings(shop),
     prisma.googleSeoSettings.findUnique({
       where: { shopDomain: shop },
       select: { seoRichSnippetsEnabled: true }
-    })
+    }),
+    getShopEntitlements(shop)
   ]);
   const { id, shopDomain, createdAt, updatedAt, ...widgetSettings } = settings;
   return corsJson({
     ...summary,
-    seoRichSnippetsEnabled: googleSeoSettings?.seoRichSnippetsEnabled || false,
+    seoRichSnippetsEnabled: entitlements.isPro && Boolean(googleSeoSettings?.seoRichSnippetsEnabled),
     widgetSettings
   }, {
     headers: {
@@ -74,20 +77,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     ? await request.json()
     : Object.fromEntries(await request.formData());
   const shopDomain = requiredString(payload.shop || payload.shopDomain, "shop");
-  const review = await createProductReview({
-    shopDomain,
-    productId: requiredString(payload.productId, "productId"),
-    productHandle: String(payload.productHandle || ""),
-    productTitle: String(payload.productTitle || ""),
-    customerName: requiredString(payload.customerName || payload.name, "name"),
-    customerEmail: String(payload.customerEmail || payload.email || ""),
-    rating: clampRating(payload.rating),
-    title: requiredString(payload.title, "title"),
-    content: requiredString(payload.content, "content"),
-    imageUrl: String(payload.imageUrl || ""),
-    verifiedPurchase: false,
-    source: "STOREFRONT"
-  });
+  let review;
+  try {
+    await assertCanSubmitStorefrontReview(shopDomain);
+    review = await createProductReview({
+      shopDomain,
+      productId: requiredString(payload.productId, "productId"),
+      productHandle: String(payload.productHandle || ""),
+      productTitle: String(payload.productTitle || ""),
+      customerName: requiredString(payload.customerName || payload.name, "name"),
+      customerEmail: String(payload.customerEmail || payload.email || ""),
+      rating: clampRating(payload.rating),
+      title: requiredString(payload.title, "title"),
+      content: requiredString(payload.content, "content"),
+      imageUrl: String(payload.imageUrl || ""),
+      verifiedPurchase: false,
+      source: "STOREFRONT"
+    });
+  } catch (error) {
+    if (error instanceof PlanLimitError) {
+      return corsJson({ ok: false, error: error.message, message: error.message }, { status: error.status });
+    }
+    throw error;
+  }
   await sendReviewNotification(shopDomain, review);
 
   return corsJson({

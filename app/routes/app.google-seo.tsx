@@ -3,6 +3,7 @@ import { useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
 import * as React from "react";
 import {
   Badge,
+  Banner,
   BlockStack,
   Button,
   Card,
@@ -11,21 +12,27 @@ import {
   Text
 } from "@shopify/polaris";
 import prisma from "~/db.server";
+import { syncAdminEntitlements } from "~/models/entitlements.server";
 import { authenticate } from "~/shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
+  const entitlements = await syncAdminEntitlements(session.shop, billing);
   const settings = await prisma.googleSeoSettings.upsert({
     where: { shopDomain: session.shop },
     update: {},
     create: { shopDomain: session.shop }
   });
 
-  return { settings };
+  return { settings, entitlements };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
+  const entitlements = await syncAdminEntitlements(session.shop, billing);
+  if (!entitlements.isPro) {
+    return { ok: false, error: "Google and SEO settings require the Pro plan." };
+  }
   const form = await request.formData();
   await prisma.googleSeoSettings.upsert({
     where: { shopDomain: session.shop },
@@ -46,7 +53,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function GoogleSeoSettings() {
-  const { settings } = useLoaderData<typeof loader>();
+  const { settings, entitlements } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const navigate = useNavigate();
   const [draft, setDraft] = React.useState({
@@ -72,6 +79,11 @@ export default function GoogleSeoSettings() {
         <input type="hidden" name="googleShoppingEnabled" value={draft.googleShoppingEnabled ? "on" : ""} />
         <input type="hidden" name="reviewsSiteEnabled" value={draft.reviewsSiteEnabled ? "on" : ""} />
         <BlockStack gap="500">
+          {!entitlements.isPro ? (
+            <Banner title="Google and SEO requires Pro" tone="info" action={{ content: "Upgrade to Pro", url: "/app" }}>
+              <Text as="p">Upgrade to enable SEO Rich Snippets, Google Shopping, and Furniture Brand Reviews discovery features.</Text>
+            </Banner>
+          ) : null}
           <InlineStack align="space-between" blockAlign="center" gap="300">
             <Button onClick={() => navigate("/app/widgets-settings")}>Back to Widgets Settings</Button>
             {fetcher.data?.ok ? <Badge tone="success">Saved</Badge> : null}
@@ -83,6 +95,7 @@ export default function GoogleSeoSettings() {
               title="Furniture Brand Reviews Site"
               description="Get featured on the Furniture Brand Reviews platform to showcase your products and reviews to more shoppers, improve SEO and increase conversions."
               checked={draft.reviewsSiteEnabled}
+              disabled={!entitlements.isPro}
               onChange={(value) => setValue("reviewsSiteEnabled", value)}
             />
           </BlockStack>
@@ -93,19 +106,34 @@ export default function GoogleSeoSettings() {
               title="SEO Rich Snippets"
               description="Add published review ratings to Product structured data when the Product Reviews Widget or Product Star Rating is installed."
               checked={draft.seoRichSnippetsEnabled}
+              disabled={!entitlements.isPro}
               onChange={(value) => setValue("seoRichSnippetsEnabled", value)}
             />
+            {entitlements.isPro && draft.seoRichSnippetsEnabled ? (
+              <Card>
+                <BlockStack gap="300">
+                  <Text as="h3" variant="headingMd">Verify SEO Rich Snippets</Text>
+                  <Text as="p" tone="subdued">
+                    Open Google Rich Results Test, enter a live product URL that has the Review Widget or Star Rating Badge installed and at least one published review, then confirm that Product contains aggregateRating.
+                  </Text>
+                  <div>
+                    <Button url="https://search.google.com/test/rich-results" target="_blank">Open Google Rich Results Test</Button>
+                  </div>
+                </BlockStack>
+              </Card>
+            ) : null}
             <SettingRow
               title="Google Shopping"
               description="Boost your Google product listings with aggregated star ratings and review counts."
               checked={draft.googleShoppingEnabled}
+              disabled={!entitlements.isPro}
               onChange={(value) => setValue("googleShoppingEnabled", value)}
             />
           </BlockStack>
 
           <Card>
             <InlineStack gap="300" blockAlign="center">
-              <Button submit variant="primary" loading={saving}>Save settings</Button>
+              <Button submit variant="primary" loading={saving} disabled={!entitlements.isPro}>Save settings</Button>
             </InlineStack>
           </Card>
         </BlockStack>
@@ -118,12 +146,14 @@ function SettingRow({
   title,
   description,
   checked,
-  onChange
+  onChange,
+  disabled = false
 }: {
   title: string;
   description: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
     <Card>
@@ -135,7 +165,7 @@ function SettingRow({
           </InlineStack>
           <Text as="p" tone="subdued">{description}</Text>
         </BlockStack>
-        <SlideSwitch checked={checked} onChange={onChange} label={title} />
+        <SlideSwitch checked={checked} onChange={onChange} label={title} disabled={disabled} />
       </InlineStack>
     </Card>
   );
@@ -144,11 +174,13 @@ function SettingRow({
 function SlideSwitch({
   checked,
   onChange,
-  label
+  label,
+  disabled = false
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -157,6 +189,7 @@ function SlideSwitch({
       aria-checked={checked}
       aria-label={`${label}: ${checked ? "On" : "Off"}`}
       onClick={() => onChange(!checked)}
+      disabled={disabled}
       style={{
         position: "relative",
         width: 48,
@@ -165,7 +198,8 @@ function SlideSwitch({
         border: "none",
         borderRadius: 999,
         padding: 3,
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.55 : 1,
         background: checked ? "#008060" : "#c9cccf",
         transition: "background 160ms ease"
       }}

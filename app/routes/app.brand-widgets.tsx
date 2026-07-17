@@ -1,11 +1,15 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
+import { redirect } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
 import { Badge, BlockStack, Button, Card, InlineGrid, InlineStack, Page, Text } from "@shopify/polaris";
 import { getBrandWidgetPayload } from "~/models/reviews.server";
 import { authenticate } from "~/shopify.server";
+import { syncAdminEntitlements } from "~/models/entitlements.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
+  const entitlements = await syncAdminEntitlements(session.shop, billing);
+  if (!entitlements.isPro) throw redirect("/app/widgets-settings");
   return getBrandWidgetPayload(session.shop);
 };
 

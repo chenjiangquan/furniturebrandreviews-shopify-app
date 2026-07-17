@@ -3,6 +3,7 @@ import { useFetcher, useLoaderData } from "@remix-run/react";
 import * as React from "react";
 import {
   Badge,
+  Banner,
   BlockStack,
   Box,
   Button,
@@ -18,6 +19,7 @@ import {
   TextField
 } from "@shopify/polaris";
 import prisma from "~/db.server";
+import { syncAdminEntitlements } from "~/models/entitlements.server";
 import { sendTestNotificationEmail, syncShopContactFromShopify } from "~/models/notifications.server";
 import { getProductReviewWidgetSettings } from "~/models/reviews.server";
 import { authenticate } from "~/shopify.server";
@@ -80,8 +82,9 @@ const WHATSAPP_SUPPORT_URL = "https://wa.me/447521530350";
 const CLAIM_PROFILE_URL = "https://www.furniturebrandreviews.com/claim-your-profile";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
   const shopDomain = session.shop;
+  const entitlements = await syncAdminEntitlements(shopDomain, billing);
   let widgetSettings = {
     brandName: defaultBrandProfile.brandName,
     brandSlug: defaultBrandProfile.brandSlug,
@@ -140,6 +143,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     googleSeoSettings.googleShoppingEnabled;
 
   return {
+    entitlements,
     googleSeoInstalled,
     productThemeEditorUrl,
     homeThemeEditorUrl,
@@ -160,7 +164,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
+  const entitlements = await syncAdminEntitlements(session.shop, billing);
   const form = await request.formData();
   const intent = String(form.get("intent") || "");
 
@@ -207,6 +212,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { ok: false, id: "", error: "Unsupported action.", message: "", brandProfile: null };
   }
 
+  if (!entitlements.isPro) {
+    return { ok: false, id: "", error: "Brand Trust Widgets require the Pro plan.", message: "", brandProfile: null };
+  }
+
   const brandName = String(form.get("brandName") || "").trim();
   if (!brandName) {
     return { ok: false, id: "", error: "Enter your brand name before installing this widget.", message: "", brandProfile: null };
@@ -239,7 +248,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function WidgetsSettings() {
-  const { googleSeoInstalled, productThemeEditorUrl, homeThemeEditorUrl, productLiquidUrl, brandProfile, notificationSettings, appUrl } = useLoaderData<typeof loader>();
+  const { entitlements, googleSeoInstalled, productThemeEditorUrl, homeThemeEditorUrl, productLiquidUrl, brandProfile, notificationSettings, appUrl } = useLoaderData<typeof loader>();
   const brandFetcher = useFetcher<typeof action>();
   const notificationFetcher = useFetcher<typeof action>();
   const [manualWidget, setManualWidget] = React.useState<ManualInstallWidget | null>(null);
@@ -280,19 +289,26 @@ export default function WidgetsSettings() {
         </WidgetSection>
 
         <WidgetSection title="Brand Trust Widgets">
+          {!entitlements.isPro ? (
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Banner title="Brand Trust Widgets are a Pro feature" tone="info" action={{ content: "Upgrade to Pro", url: "/app" }}>
+                <Text as="p">Upgrade to connect a business profile and install the Brand Review Carousel or Brand Micro Trust Badge.</Text>
+              </Banner>
+            </div>
+          ) : null}
           <div style={{ alignSelf: "start" }}>
             <Card>
               <BlockStack gap="400">
                 <BlockStack gap="200">
                   <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
                     <Text as="h3" variant="headingMd">FurnitureBrandReviews business profile</Text>
-                    {brandSlug ? <Badge tone="success">Profile connected</Badge> : <Badge tone="attention">Profile required</Badge>}
+                    {!entitlements.isPro ? <Badge>Pro</Badge> : brandSlug ? <Badge tone="success">Profile connected</Badge> : <Badge tone="attention">Profile required</Badge>}
                   </InlineStack>
                   <Text as="p" tone="subdued">
                     Connect your business profile before installing a brand widget so your reviews can load correctly.
                   </Text>
                   <div>
-                    <Button url={CLAIM_PROFILE_URL} target="_blank">Claim your business profile</Button>
+                    <Button url={CLAIM_PROFILE_URL} target="_blank" disabled={!entitlements.isPro}>Claim your business profile</Button>
                   </div>
                 </BlockStack>
 
@@ -309,12 +325,13 @@ export default function WidgetsSettings() {
                           onChange={setBrandName}
                           autoComplete="organization"
                           placeholder="Enter your brand name"
+                          disabled={!entitlements.isPro}
                         />
                         <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
                           <Text as="p" tone="subdued">
                             {brandSlug ? `Brand slug: ${brandSlug}` : "Save a brand name to create its slug."}
                           </Text>
-                          <Button submit variant="primary" loading={brandFetcher.state !== "idle"}>Save brand name</Button>
+                          <Button submit variant="primary" loading={brandFetcher.state !== "idle"} disabled={!entitlements.isPro}>Save brand name</Button>
                         </InlineStack>
                         {brandFetcher.data?.ok ? <Badge tone="success">Brand name saved</Badge> : null}
                         {brandFetcher.data && !brandFetcher.data.ok ? <Text as="p" tone="critical">{brandFetcher.data.error}</Text> : null}
@@ -380,7 +397,7 @@ export default function WidgetsSettings() {
             </Card>
           </div>
           {brandTrustWidgets.map((widget) => {
-            const canInstall = Boolean(brandSlug);
+            const canInstall = Boolean(brandSlug) && entitlements.isPro;
             return (
             <WidgetCard
               key={widget.title}
@@ -414,10 +431,12 @@ export default function WidgetsSettings() {
             description="Manage review visibility settings for Google search, rich snippets, and shopping feeds."
             image="/widget-previews/google-and-seo.jpg"
           >
-            <Badge tone={googleSeoInstalled ? "success" : "attention"}>
-              {googleSeoInstalled ? "Installed" : "Settings only"}
+            <Badge tone={entitlements.isPro && googleSeoInstalled ? "success" : "attention"}>
+              {!entitlements.isPro ? "Pro" : googleSeoInstalled ? "Installed" : "Settings only"}
             </Badge>
-            <Button url="/app/google-seo" variant="primary">Manage</Button>
+            <Button url={entitlements.isPro ? "/app/google-seo" : "/app"} variant="primary">
+              {entitlements.isPro ? "Manage" : "Upgrade to Pro"}
+            </Button>
           </WidgetCard>
         </WidgetSection>
 

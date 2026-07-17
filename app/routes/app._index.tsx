@@ -16,7 +16,8 @@ import {
 } from "@shopify/polaris";
 import { CheckIcon, XIcon } from "@shopify/polaris-icons";
 import prisma from "~/db.server";
-import { PRO_PLAN, PRO_PLAN_PRICE } from "~/models/billing-plans";
+import { syncAdminEntitlements } from "~/models/entitlements.server";
+import { PRO_PLAN_PRICE } from "~/models/billing-plans";
 import { authenticate, isFreeProShop } from "~/shopify.server";
 
 type PlanSource = "FREE" | "BILLING" | "FREE_PARTNER";
@@ -42,22 +43,14 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<Dashboard
     const { billing, session } = await authenticate.admin(request);
     const shopDomain = session.shop;
     const { totalReviews } = await getDashboardReviewStats(shopDomain);
-    const billingStatus = isFreeProShop(shopDomain)
-      ? { plan: "PRO" as const, planSource: "FREE_PARTNER" as const, subscriptionId: "" }
-      : await getBillingStatus(billing);
-
-    await prisma.subscriptionSettings.upsert({
-      where: { shopDomain },
-      update: { plan: billingStatus.plan },
-      create: { shopDomain, plan: billingStatus.plan }
-    }).catch((error) => console.error("Failed to sync subscription status", error));
+    const billingStatus = await syncAdminEntitlements(shopDomain, billing);
 
     return {
       totalReviews,
       brandWidgetStatus: "Active",
       plan: billingStatus.plan,
       planSource: billingStatus.planSource,
-      subscriptionId: billingStatus.subscriptionId
+      subscriptionId: ""
     };
   } catch (error) {
     if (error instanceof Response) {
@@ -109,29 +102,6 @@ function normalizeShopDomain(shopDomain: string) {
     .replace(/^https?:\/\//, "")
     .replace(/\/.*$/, "")
     .trim();
-}
-
-async function getBillingStatus(billing: any) {
-  const checks = await Promise.allSettled([
-    billing.check({ plans: [PRO_PLAN], isTest: false }),
-    billing.check({ plans: [PRO_PLAN], isTest: true })
-  ]);
-
-  for (const check of checks) {
-    if (check.status === "fulfilled" && check.value.hasActivePayment) {
-      return {
-        plan: "PRO" as const,
-        planSource: "BILLING" as const,
-        subscriptionId: check.value.appSubscriptions[0]?.id || ""
-      };
-    }
-  }
-
-  return {
-    plan: "FREE" as const,
-    planSource: "FREE" as const,
-    subscriptionId: ""
-  };
 }
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -411,7 +381,7 @@ const planRows: ReadonlyArray<readonly [string, PlanCellValue, PlanCellValue]> =
   ["Product reviews", true, true],
   ["Review widget", true, true],
   ["Star rating badge", true, true],
-  ["Brand trust widgets", true, true],
+  ["Brand trust widgets", false, true],
   ["Photo reviews", true, true],
   ["Review replies", true, true],
   ["Questions & Answers", true, true],

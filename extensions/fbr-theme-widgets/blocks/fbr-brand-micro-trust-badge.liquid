@@ -45,16 +45,17 @@
       document.head.appendChild(script);
     }
 
-    if (root.dataset.brand) {
-      loadExternalWidget(root.dataset.brand);
-      return;
-    }
-
     var apiBase = (root.dataset.apiBase || "/apps/fbr").replace(/\/$/, "");
     var url = apiBase + "/api/brand-profile-settings?shop=" + encodeURIComponent(root.dataset.shop || "");
     fetch(url, { credentials: "same-origin" })
       .then(function (response) { return response.ok ? response.json() : null; })
-      .then(function (data) { loadExternalWidget(data && data.brandSlug); })
+      .then(function (data) {
+        if (data && data.locked) {
+          root.remove();
+          return;
+        }
+        loadExternalWidget(data && data.brandSlug);
+      })
       .catch(showFallback);
   })();
 </script>

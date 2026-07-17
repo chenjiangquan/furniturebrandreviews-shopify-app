@@ -20,6 +20,12 @@ import {
   TextField
 } from "@shopify/polaris";
 import prisma from "~/db.server";
+import {
+  deleteProductReviewWithPlanLimit,
+  getMonthlyPlanUsage,
+  PlanLimitError,
+  syncAdminEntitlements
+} from "~/models/entitlements.server";
 import { clampRating, createProductReview, ensureShop, requiredString } from "~/models/reviews.server";
 import { authenticate } from "~/shopify.server";
 
@@ -42,7 +48,8 @@ const questionStatusOptions = [
 const pageSizeOptions = [20, 30];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
+  const entitlements = await syncAdminEntitlements(session.shop, billing);
   const url = new URL(request.url);
   const query = (url.searchParams.get("q") || "").trim();
   const rating = url.searchParams.get("rating") || "";
@@ -102,7 +109,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
   }
 
-  const [reviews, reviewCount, questions] = await Promise.all([
+  const [reviews, reviewCount, questions, usage] = await Promise.all([
     view === "reviews"
       ? prisma.productReview.findMany({
           where,
@@ -114,15 +121,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     view === "reviews" ? prisma.productReview.count({ where }) : Promise.resolve(0),
     view === "questions"
       ? prisma.productQuestion.findMany({ where: questionWhere, orderBy: { createdAt: "desc" }, take: 100 })
-      : Promise.resolve([])
+      : Promise.resolve([]),
+    getMonthlyPlanUsage(session.shop)
   ]);
   const totalPages = Math.max(1, Math.ceil(reviewCount / perPage));
 
-  return { reviews, questions, view, page, totalPages, reviewCount, sort, perPage };
+  return { reviews, questions, view, page, totalPages, reviewCount, sort, perPage, entitlements, usage };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
+  await syncAdminEntitlements(session.shop, billing);
   const form = await request.formData();
   const intent = String(form.get("intent"));
   const id = String(form.get("id") || "");
@@ -153,7 +162,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "delete") {
-    await prisma.productReview.delete({ where: { id } });
+    try {
+      await deleteProductReviewWithPlanLimit(session.shop, id);
+    } catch (error) {
+      if (error instanceof PlanLimitError) return { ok: false, error: error.message };
+      throw error;
+    }
   }
 
   if (intent === "questionStatus") {
@@ -208,7 +222,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       content: requiredString(form.get("content"), "content"),
       imageUrl: String(form.get("imageUrl") || ""),
       verifiedPurchase: form.get("verifiedPurchase") === "on",
-      source: "STOREFRONT"
+      source: "IMPORTED"
     });
   }
 
@@ -220,7 +234,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function ProductReviews() {
-  const { reviews, questions, page, totalPages, perPage, reviewCount } = useLoaderData<typeof loader>();
+  const { reviews, questions, page, totalPages, perPage, reviewCount, entitlements, usage } = useLoaderData<typeof loader>();
   const [params, setParams] = useSearchParams();
   const navigation = useNavigation();
   const selectedView = params.get("view") === "questions" ? "questions" : "reviews";
@@ -297,6 +311,14 @@ export default function ProductReviews() {
       <div style={{ paddingBottom: 80 }}>
       <BlockStack gap="400">
         <ImportReviewsModal open={importOpen} onClose={() => setImportOpen(false)} />
+
+        {!entitlements.isPro ? (
+          <Banner title="Free plan monthly usage" tone="info" action={{ content: "Upgrade to Pro", url: "/app" }}>
+            <Text as="p">
+              Customer reviews: {usage.reviewSubmissions}/{usage.reviewLimit} · Deleted reviews: {usage.reviewDeletions}/{usage.deleteLimit}. Usage resets at the start of each UTC calendar month.
+            </Text>
+          </Banner>
+        ) : null}
 
         <Card padding="0">
           <Tabs
@@ -497,6 +519,9 @@ function ReviewRow({ review, busy }: { review: any; busy: boolean }) {
       </InlineStack>
 
       <BlockStack gap="300">
+        {(fetcher.data as { error?: string } | undefined)?.error ? (
+          <Text as="p" tone="critical">{(fetcher.data as { error?: string }).error}</Text>
+        ) : null}
         <ReplyModal review={review} open={replyOpen} onClose={() => setReplyOpen(false)} />
         <VerifiedPurchaseControl review={review} />
         {review.imageUrl ? <HideReviewImageControl review={review} /> : null}
