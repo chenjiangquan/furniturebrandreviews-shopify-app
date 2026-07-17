@@ -7,7 +7,6 @@ const csvTemplateHeaders = [
   "title",
   "content",
   "imageUrl",
-  "status",
   "verifiedPurchase",
   "createdAt"
 ];
@@ -22,7 +21,6 @@ export const loader = async () => {
     "Excellent",
     "Amazing product!",
     "https://example.com/image.jpg",
-    "PUBLISHED",
     "true",
     "2026-05-15"
   ];

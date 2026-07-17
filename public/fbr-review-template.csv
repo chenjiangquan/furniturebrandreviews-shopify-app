@@ -1,2 +1,2 @@
-productHandle,productTitle,customerName,customerEmail,rating,title,content,imageUrl,status,verifiedPurchase,createdAt
-test-product,Test Product,John Doe,john@example.com,5,Excellent,Amazing product!,https://example.com/image.jpg,PUBLISHED,true,2026-05-15
+productHandle,productTitle,customerName,customerEmail,rating,title,content,imageUrl,verifiedPurchase,createdAt
+test-product,Test Product,John Doe,john@example.com,5,Excellent,Amazing product!,https://example.com/image.jpg,true,2026-05-15

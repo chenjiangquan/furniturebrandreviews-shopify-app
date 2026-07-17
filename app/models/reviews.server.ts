@@ -4,7 +4,6 @@ import { defaultProductReviewWidgetSettings } from "~/models/product-review-widg
 
 const productReviewCreateLocks = new Map<string, Promise<ProductReview>>();
 const productQuestionCreateLocks = new Map<string, Promise<ProductQuestion>>();
-export const pendingReviewStatuses = ["PENDING", "Pending", "pending"];
 export const publishedReviewStatuses = ["PUBLISHED", "Published", "published", "APPROVED", "Approved", "approved"];
 
 export function corsJson(data: unknown, init: ResponseInit = {}) {
@@ -43,17 +42,6 @@ const productReviewSettingsFieldNames = new Set(
     .filter((field) => field.kind === "scalar" && !["id", "shopDomain", "createdAt", "updatedAt"].includes(field.name))
     .map((field) => field.name) || []
 );
-
-export async function normalizeLegacyReviewStatuses(shopDomain: string) {
-  await prisma.productReview.updateMany({
-    where: { shopDomain, status: { in: ["APPROVED", "Approved", "approved", "Published", "published"] } },
-    data: { status: "PUBLISHED" }
-  });
-  await prisma.productReview.updateMany({
-    where: { shopDomain, status: { in: ["Pending", "pending"] } },
-    data: { status: "PENDING" }
-  });
-}
 
 export async function incrementProductReviewUsefulCount(shopDomain: string, reviewId: string) {
   const review = await prisma.productReview.findFirst({
@@ -320,7 +308,6 @@ export async function createProductReview(input: {
   content: string;
   imageUrl?: string | null;
   verifiedPurchase?: boolean;
-  status?: "PENDING" | "PUBLISHED" | "REJECTED" | "SPAM" | "ARCHIVED";
   source?: "STOREFRONT" | "IMPORTED";
 }) {
   await ensureShop(input.shopDomain);
@@ -338,7 +325,7 @@ export async function createProductReview(input: {
     imageUrl: input.imageUrl?.trim() || "",
     source: input.source || "STOREFRONT",
     verifiedPurchase: input.verifiedPurchase || false,
-    status: input.status || "PENDING"
+    status: "PUBLISHED"
   };
   const lockKey = [
     data.shopDomain,

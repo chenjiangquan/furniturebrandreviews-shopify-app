@@ -39,7 +39,6 @@ const productReviewSettingsFieldNames = new Set(
 const booleanFields = [
   "productReviewsEnabled",
   "productReviewWidgetEnabled",
-  "autoApproveReviews",
   "requireEmail",
   "showVerifiedBadge",
   "allowPhotoReviews",

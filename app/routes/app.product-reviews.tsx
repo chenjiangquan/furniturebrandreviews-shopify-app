@@ -23,24 +23,12 @@ import prisma from "~/db.server";
 import { clampRating, createProductReview, ensureShop, requiredString } from "~/models/reviews.server";
 import { authenticate } from "~/shopify.server";
 
-type ReviewStatus = "PENDING" | "PUBLISHED" | "REJECTED" | "SPAM" | "ARCHIVED";
 type QuestionStatus = "PENDING" | "PUBLISHED" | "REJECTED" | "ARCHIVED";
 
 const tabs = [
-  { id: "all", content: "All Reviews", status: "" },
-  { id: "pending", content: "Pending", status: "PENDING" },
-  { id: "product", content: "Product Reviews", status: "" },
-  { id: "store", content: "Store Reviews", status: "" },
-  { id: "spam", content: "Spam", status: "SPAM" },
-  { id: "archive", content: "Archive", status: "ARCHIVED" }
-];
-
-const statusOptions = [
-  { label: "Published", value: "PUBLISHED" },
-  { label: "Pending", value: "PENDING" },
-  { label: "Rejected", value: "REJECTED" },
-  { label: "Spam", value: "SPAM" },
-  { label: "Archived", value: "ARCHIVED" }
+  { id: "all", content: "All Reviews" },
+  { id: "product", content: "Product Reviews" },
+  { id: "store", content: "Store Reviews" }
 ];
 
 const viewTabs = [
@@ -55,12 +43,11 @@ const questionStatusOptions = [
   { label: "Archived", value: "ARCHIVED" }
 ];
 
-const pageSizeOptions = [20, 25, 30];
+const pageSizeOptions = [20, 30];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const url = new URL(request.url);
-  const tabId = url.searchParams.get("tab") || "all";
   const query = (url.searchParams.get("q") || "").trim();
   const rating = url.searchParams.get("rating") || "";
   const picture = url.searchParams.get("picture") || "";
@@ -70,8 +57,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ? Number(url.searchParams.get("perPage"))
     : 20;
   const view = url.searchParams.get("view") === "questions" ? "questions" : "reviews";
-  const tab = tabs.find((item) => item.id === tabId) || tabs[0];
-  const status = url.searchParams.get("status") || tab.status;
   const containsSearch = (value: string) => ({ contains: value, mode: "insensitive" }) as const;
   const andFilters = [
     ...(picture === "with" ? [{ imageHidden: false }, { imageUrl: { not: null } }, { imageUrl: { not: "" } }] : []),
@@ -90,7 +75,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ];
   const where = {
     shopDomain: session.shop,
-    ...(status ? { status } : {}),
     ...(rating ? { rating: Number(rating) } : {}),
     ...(andFilters.length ? { AND: andFilters } : {})
   };
@@ -122,20 +106,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
   }
 
-  const [reviews, reviewCount, questions, productSettings] = await Promise.all([
-    prisma.productReview.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * perPage,
-      take: perPage
-    }),
-    prisma.productReview.count({ where }),
-    prisma.productQuestion.findMany({ where: questionWhere, orderBy: { createdAt: "desc" }, take: 100 }),
-    prisma.productReviewSettings.upsert({ where: { shopDomain: session.shop }, update: {}, create: { shopDomain: session.shop } })
+  const [reviews, reviewCount, questions] = await Promise.all([
+    view === "reviews"
+      ? prisma.productReview.findMany({
+          where,
+          orderBy: { createdAt: "desc" },
+          skip: (page - 1) * perPage,
+          take: perPage
+        })
+      : Promise.resolve([]),
+    view === "reviews" ? prisma.productReview.count({ where }) : Promise.resolve(0),
+    view === "questions"
+      ? prisma.productQuestion.findMany({ where: questionWhere, orderBy: { createdAt: "desc" }, take: 100 })
+      : Promise.resolve([])
   ]);
   const totalPages = Math.max(1, Math.ceil(reviewCount / perPage));
 
-  return { reviews, questions, autoApproveReviews: productSettings.autoApproveReviews, view, page, totalPages, reviewCount, sort, perPage };
+  return { reviews, questions, view, page, totalPages, reviewCount, sort, perPage };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -143,20 +130,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const form = await request.formData();
   const intent = String(form.get("intent"));
   const id = String(form.get("id") || "");
-
-  if (intent === "approve" || intent === "reject") {
-    await prisma.productReview.update({
-      where: { id },
-      data: { status: intent === "approve" ? "PUBLISHED" : "REJECTED" }
-    });
-  }
-
-  if (intent === "status") {
-    await prisma.productReview.update({
-      where: { id },
-      data: { status: String(form.get("status") || "PENDING") as ReviewStatus }
-    });
-  }
 
   if (intent === "verifiedPurchase") {
     await prisma.productReview.update({
@@ -169,17 +142,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await prisma.productReview.updateMany({
       where: { id, shopDomain: session.shop },
       data: { imageHidden: form.get("imageHidden") === "on" }
-    });
-  }
-
-  if (intent === "autoPublish") {
-    await prisma.productReviewSettings.upsert({
-      where: { shopDomain: session.shop },
-      update: { autoApproveReviews: form.get("autoApproveReviews") === "on" },
-      create: {
-        shopDomain: session.shop,
-        autoApproveReviews: form.get("autoApproveReviews") === "on"
-      }
     });
   }
 
@@ -262,12 +224,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       content: requiredString(form.get("content"), "content"),
       imageUrl: String(form.get("imageUrl") || ""),
       verifiedPurchase: form.get("verifiedPurchase") === "on",
-      status: String(form.get("status") || "PENDING") as ReviewStatus,
       source: "STOREFRONT"
     });
   }
 
-  if (["status", "verifiedPurchase", "imageHidden", "reply", "delete", "importCsv", "autoPublish", "questionStatus", "questionAnswer", "questionDelete"].includes(intent)) {
+  if (["verifiedPurchase", "imageHidden", "reply", "delete", "importCsv", "questionStatus", "questionAnswer", "questionDelete"].includes(intent)) {
     return { ok: true };
   }
 
@@ -275,13 +236,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function ProductReviews() {
-  const { reviews, questions, autoApproveReviews, page, totalPages, perPage, reviewCount } = useLoaderData<typeof loader>();
+  const { reviews, questions, page, totalPages, perPage, reviewCount } = useLoaderData<typeof loader>();
   const [params, setParams] = useSearchParams();
   const navigation = useNavigation();
   const selectedView = params.get("view") === "questions" ? "questions" : "reviews";
   const selectedTab = Math.max(0, tabs.findIndex((tab) => tab.id === (params.get("tab") || "all")));
   const selectedViewTab = selectedView === "questions" ? 1 : 0;
   const busy = navigation.state !== "idle";
+  const optimisticPerPage = navigation.location
+    ? Number(new URLSearchParams(navigation.location.search).get("perPage") || perPage)
+    : perPage;
   const [showAddReview, setShowAddReview] = React.useState(false);
   const [importOpen, setImportOpen] = React.useState(false);
   const [searchValue, setSearchValue] = React.useState(params.get("q") || "");
@@ -340,7 +304,6 @@ export default function ProductReviews() {
     <Page
       fullWidth
       title="Reviews"
-      titleMetadata={<AutoPublishToggle enabled={autoApproveReviews} />}
       primaryAction={{ content: "Export", onAction: exportReviews }}
       secondaryActions={[
         { content: "Import", onAction: () => setImportOpen(true) },
@@ -454,7 +417,7 @@ export default function ProductReviews() {
                 totalPages={totalPages}
                 busy={busy}
                 onPageChange={setPage}
-                perPage={perPage}
+                perPage={optimisticPerPage}
                 onPerPageChange={setPerPage}
               />
             </Box>
@@ -471,7 +434,6 @@ function ReviewRow({ review, busy }: { review: any; busy: boolean }) {
   const [replyOpen, setReplyOpen] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
   const [imagePreviewOpen, setImagePreviewOpen] = React.useState(false);
-  const status = String(review.status || "PENDING");
   const submitIntent = (intent: string) => {
     const formData = new FormData();
     formData.set("intent", intent);
@@ -552,23 +514,6 @@ function ReviewRow({ review, busy }: { review: any; busy: boolean }) {
       </InlineStack>
 
       <BlockStack gap="300">
-        <fetcher.Form method="post">
-          <input type="hidden" name="intent" value="status" />
-          <input type="hidden" name="id" value={review.id} />
-          <Select
-            label="Status"
-            labelHidden
-            options={statusOptions}
-            value={status}
-            onChange={(value) => {
-              const formData = new FormData();
-              formData.set("intent", "status");
-              formData.set("id", review.id);
-              formData.set("status", value);
-              fetcher.submit(formData, { method: "post" });
-            }}
-          />
-        </fetcher.Form>
         <ReplyModal review={review} open={replyOpen} onClose={() => setReplyOpen(false)} />
         <VerifiedPurchaseControl review={review} />
         {review.imageUrl ? <HideReviewImageControl review={review} /> : null}
@@ -650,6 +595,7 @@ function ReviewsPagination({
         Next ›
       </button>
       <InlineStack gap="200" blockAlign="center" wrap={false}>
+        {busy ? <Text as="span" tone="subdued">Loading reviews…</Text> : null}
         <Text as="p">Result per page</Text>
         <div style={{ width: 92 }}>
           <Select
@@ -658,6 +604,7 @@ function ReviewsPagination({
             value={String(perPage)}
             options={pageSizeOptions.map((value) => ({ label: String(value), value: String(value) }))}
             onChange={onPerPageChange}
+            disabled={busy}
           />
         </div>
       </InlineStack>
@@ -791,29 +738,6 @@ function QuestionAnswerModal({ question, open, onClose }: { question: any; open:
   );
 }
 
-function AutoPublishToggle({ enabled }: { enabled: boolean }) {
-  const fetcher = useFetcher();
-  const [checked, setChecked] = React.useState(enabled);
-
-  React.useEffect(() => {
-    setChecked(enabled);
-  }, [enabled]);
-
-  return (
-    <Checkbox
-      label={`Auto-publish: ${checked ? "On" : "Off"}`}
-      checked={checked}
-      onChange={(nextChecked) => {
-        setChecked(nextChecked);
-        const formData = new FormData();
-        formData.set("intent", "autoPublish");
-        if (nextChecked) formData.set("autoApproveReviews", "on");
-        fetcher.submit(formData, { method: "post" });
-      }}
-    />
-  );
-}
-
 function ReviewFilterPopover() {
   const [params, setParams] = useSearchParams();
   const navigation = useNavigation();
@@ -887,7 +811,6 @@ function ReviewFilterPopover() {
 }
 
 function ReviewFields({ intent, review, busy }: { intent: "create" | "edit"; review?: any; busy: boolean }) {
-  const [status, setStatus] = React.useState("PENDING");
   const [productId, setProductId] = React.useState(review?.productId || "");
   const [productHandle, setProductHandle] = React.useState(review?.productHandle || "");
   const [productTitle, setProductTitle] = React.useState(review?.productTitle || "");
@@ -913,14 +836,7 @@ function ReviewFields({ intent, review, busy }: { intent: "create" | "edit"; rev
         <TextField label="Title" name="title" value={title} onChange={setTitle} autoComplete="off" />
         <TextField label="Review content" name="content" value={content} onChange={setContent} multiline={4} autoComplete="off" />
         {intent === "create" ? (
-          <>
-            <TextField label="Image URL" name="imageUrl" value={imageUrl} onChange={setImageUrl} type="url" autoComplete="off" />
-            <Select label="Status" name="status" value={status} onChange={setStatus} options={[
-              { label: "Pending", value: "PENDING" },
-              { label: "Published", value: "PUBLISHED" },
-              { label: "Rejected", value: "REJECTED" }
-            ]} />
-          </>
+          <TextField label="Image URL" name="imageUrl" value={imageUrl} onChange={setImageUrl} type="url" autoComplete="off" />
         ) : null}
         {intent === "create" ? (
           <>
@@ -979,7 +895,7 @@ function ImportReviewsModal({ open, onClose }: { open: boolean; onClose: () => v
           <Card>
             <BlockStack gap="300">
               <Text as="p" variant="headingSm">CSV file</Text>
-              <Text as="p" tone="subdued">Supported columns: productHandle, productTitle, customerName, customerEmail, rating, title, content, imageUrl, status, verifiedPurchase, createdAt. Judge.me exports are mapped automatically.</Text>
+              <Text as="p" tone="subdued">Supported columns: productHandle, productTitle, customerName, customerEmail, rating, title, content, imageUrl, verifiedPurchase, createdAt. Judge.me exports are mapped automatically and all imported reviews are published.</Text>
               <input
                 ref={inputRef}
                 type="file"
@@ -1014,8 +930,8 @@ function ImportReviewsModal({ open, onClose }: { open: boolean; onClose: () => v
 
 function downloadCsvTemplate() {
   const csv = [
-    "productHandle,productTitle,customerName,customerEmail,rating,title,content,imageUrl,status,verifiedPurchase,createdAt",
-    "test-product,Test Product,John Doe,john@example.com,5,Excellent,Amazing product!,https://example.com/image.jpg,PUBLISHED,true,2026-05-15"
+    "productHandle,productTitle,customerName,customerEmail,rating,title,content,imageUrl,verifiedPurchase,createdAt",
+    "test-product,Test Product,John Doe,john@example.com,5,Excellent,Amazing product!,https://example.com/image.jpg,true,2026-05-15"
   ].join("\n");
   const blob = new Blob([`${csv}\n`], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -1038,7 +954,6 @@ function productReviewsToCsv(reviews: Array<any>) {
     "title",
     "content",
     "imageUrl",
-    "status",
     "verifiedPurchase",
     "createdAt"
   ];
@@ -1051,7 +966,6 @@ function productReviewsToCsv(reviews: Array<any>) {
     review.title,
     review.content,
     review.imageUrl || "",
-    review.status,
     review.verifiedPurchase ? "true" : "false",
     new Date(review.createdAt).toISOString().slice(0, 10)
   ]);
@@ -1256,7 +1170,7 @@ async function importReviewsFromCsv(shopDomain: string, csvText: string) {
         rating,
         title,
         content,
-        status: importedReview.status,
+        status: "PUBLISHED",
         source: "IMPORTED",
         verifiedPurchase: importedReview.verifiedPurchase,
         imageUrl: importedReview.imageUrl,
@@ -1319,7 +1233,6 @@ function normalizeImportedReviewRow(row: ImportedCsvRow, importedAt: Date, isJud
       rating: getCsvField(row, "rating"),
       title: getCsvField(row, "title"),
       content: getCsvField(row, "body", "content"),
-      status: normalizeJudgeMeStatus(getCsvField(row, "curated", "status")),
       verifiedPurchase: parseBoolean(getCsvField(row, "verifiedPurchase", "verified_purchase")),
       imageUrl: firstImageUrl(getCsvField(row, "picture_urls", "imageUrl")),
       merchantReply: reply || null,
@@ -1340,7 +1253,6 @@ function normalizeImportedReviewRow(row: ImportedCsvRow, importedAt: Date, isJud
     rating: getCsvField(row, "rating"),
     title: getCsvField(row, "title"),
     content: getCsvField(row, "content", "body"),
-    status: normalizeImportedStatus(getCsvField(row, "status")),
     verifiedPurchase: parseBoolean(getCsvField(row, "verifiedPurchase", "verified_purchase")),
     imageUrl: firstImageUrl(getCsvField(row, "imageUrl", "picture_urls")),
     merchantReply: reply || null,
@@ -1384,26 +1296,6 @@ function humanizeProductHandle(handle: string) {
     .replace(/\s+/g, " ")
     .trim()
     .replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
-}
-
-function normalizeJudgeMeStatus(value: string) {
-  const normalized = value.trim().toLowerCase();
-  if (["ok", "published", "approved", "curated", "1", "true", "yes"].includes(normalized)) {
-    return "PUBLISHED";
-  }
-  if (["spam"].includes(normalized)) return "SPAM";
-  if (["archived", "archive"].includes(normalized)) return "ARCHIVED";
-  if (["rejected", "declined"].includes(normalized)) return "REJECTED";
-  return "PENDING";
-}
-
-function normalizeImportedStatus(status: string) {
-  const normalized = status.trim().toUpperCase();
-  if (normalized === "APPROVED" || normalized === "PUBLISHED") return "PUBLISHED";
-  if (normalized === "REJECTED") return "REJECTED";
-  if (normalized === "SPAM") return "SPAM";
-  if (normalized === "ARCHIVED" || normalized === "ARCHIVE") return "ARCHIVED";
-  return "PENDING";
 }
 
 function parseBoolean(value: string) {

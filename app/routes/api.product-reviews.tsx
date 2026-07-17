@@ -48,8 +48,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     ? await request.json()
     : Object.fromEntries(await request.formData());
   const shopDomain = requiredString(payload.shop || payload.shopDomain, "shop");
-  const settings = await prisma.productReviewSettings.findUnique({ where: { shopDomain } });
-
   const review = await createProductReview({
     shopDomain,
     productId: requiredString(payload.productId, "productId"),
@@ -62,7 +60,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     content: requiredString(payload.content, "content"),
     imageUrl: String(payload.imageUrl || ""),
     verifiedPurchase: false,
-    status: settings?.autoApproveReviews ? "PUBLISHED" : "PENDING",
     source: "STOREFRONT"
   });
   void sendReviewNotification(shopDomain, review);
@@ -71,6 +68,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     ok: true,
     review,
     status: review.status,
-    message: "Review submitted and waiting for merchant approval."
+    message: "Review submitted and published."
   });
 };

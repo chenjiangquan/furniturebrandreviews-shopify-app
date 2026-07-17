@@ -23,8 +23,6 @@ type PlanSource = "FREE" | "BILLING" | "FREE_PARTNER";
 
 type DashboardData = {
   totalReviews: number;
-  pendingReviews: number;
-  approvedReviews: number;
   brandWidgetStatus: string;
   plan: "FREE" | "PRO";
   planSource: PlanSource;
@@ -33,8 +31,6 @@ type DashboardData = {
 
 const fallbackData: DashboardData = {
   totalReviews: 0,
-  pendingReviews: 0,
-  approvedReviews: 0,
   brandWidgetStatus: "Active",
   plan: "FREE",
   planSource: "FREE",
@@ -45,7 +41,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<Dashboard
   try {
     const { billing, session } = await authenticate.admin(request);
     const shopDomain = session.shop;
-    const { totalReviews, pendingReviews, approvedReviews } = await getDashboardReviewStats(shopDomain);
+    const { totalReviews } = await getDashboardReviewStats(shopDomain);
     const billingStatus = isFreeProShop(shopDomain)
       ? { plan: "PRO" as const, planSource: "FREE_PARTNER" as const, subscriptionId: "" }
       : await getBillingStatus(billing);
@@ -58,8 +54,6 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<Dashboard
 
     return {
       totalReviews,
-      pendingReviews,
-      approvedReviews,
       brandWidgetStatus: "Active",
       plan: billingStatus.plan,
       planSource: billingStatus.planSource,
@@ -105,13 +99,8 @@ async function dashboardReviewShopDomains(shopDomain: string) {
 }
 
 async function countReviewsForShopDomains(shopDomains: string[]) {
-  const [totalReviews, pendingReviews, approvedReviews] = await Promise.all([
-    prisma.productReview.count({ where: { shopDomain: { in: shopDomains } } }),
-    prisma.productReview.count({ where: { shopDomain: { in: shopDomains }, status: "PENDING" } }),
-    prisma.productReview.count({ where: { shopDomain: { in: shopDomains }, status: "PUBLISHED" } })
-  ]);
-
-  return { totalReviews, pendingReviews, approvedReviews };
+  const totalReviews = await prisma.productReview.count({ where: { shopDomain: { in: shopDomains } } });
+  return { totalReviews };
 }
 
 function normalizeShopDomain(shopDomain: string) {
@@ -262,10 +251,8 @@ export default function Dashboard() {
         </Layout.Section>
 
         <Layout.Section>
-          <InlineGrid columns={{ xs: 1, md: 4 }} gap="400">
+          <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
             <MetricCard title="Total Product Reviews" value={data.totalReviews} />
-            <MetricCard title="Pending Reviews" value={data.pendingReviews} tone="critical" />
-            <MetricCard title="Approved Reviews" value={data.approvedReviews} />
             <Card>
               <BlockStack gap="200">
                 <Text as="p" tone="subdued">Brand Widget Status</Text>
@@ -418,19 +405,23 @@ function MetricCard({
   );
 }
 
-const planRows = [
+type PlanCellValue = boolean | string;
+
+const planRows: ReadonlyArray<readonly [string, PlanCellValue, PlanCellValue]> = [
   ["Product reviews", true, true],
+  ["Unlimited Review", "50 reviews/month", true],
+  ["Delete Review", "5 reviews/month", true],
   ["Review widget", true, true],
   ["Star rating badge", true, true],
-  ["Brand trust widgets", false, true],
-  ["Photo reviews", false, true],
+  ["Brand trust widgets", true, true],
+  ["Photo reviews", true, true],
   ["Review replies", true, true],
-  ["Questions & Answers", false, true],
+  ["Questions & Answers", true, true],
   ["Google and SEO", false, true],
   ["AI review summary", false, true],
   ["Carousel layout", false, true],
   ["Priority support", false, true]
-] as const;
+];
 
 function PlanComparisonTable({ currentPlan }: { currentPlan: "FREE" | "PRO" }) {
   return (
@@ -463,14 +454,20 @@ function PlanComparisonTable({ currentPlan }: { currentPlan: "FREE" | "PRO" }) {
           {planRows.map(([feature, free, advanced]) => (
             <tr key={feature}>
               <td style={planCellStyle}>{feature}</td>
-              <td style={planCellStyle}><PlanMark enabled={free} /></td>
-              <td style={planCellStyle}><PlanMark enabled={advanced} /></td>
+              <td style={planCellStyle}><PlanCell value={free} /></td>
+              <td style={planCellStyle}><PlanCell value={advanced} /></td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
   );
+}
+
+function PlanCell({ value }: { value: PlanCellValue }) {
+  return typeof value === "boolean"
+    ? <PlanMark enabled={value} />
+    : <Text as="span">{value}</Text>;
 }
 
 function PlanMark({ enabled }: { enabled: boolean }) {

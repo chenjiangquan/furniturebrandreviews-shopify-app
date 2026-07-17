@@ -1,7 +1,6 @@
 export const defaultProductReviewWidgetSettings = {
   productReviewsEnabled: true,
   productReviewWidgetEnabled: true,
-  autoApproveReviews: false,
   requireEmail: true,
   showVerifiedBadge: true,
   allowPhotoReviews: false,

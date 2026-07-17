@@ -57,7 +57,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       where: { shopDomain },
       update: {
         productReviewsEnabled: form.get("productReviewsEnabled") === "on",
-        autoApproveReviews: form.get("autoApproveReviews") === "on",
         requireEmail: form.get("requireEmail") === "on",
         showVerifiedBadge: form.get("showVerifiedBadge") === "on",
         allowPhotoReviews: form.get("allowPhotoReviews") === "on",
@@ -128,7 +127,6 @@ export default function Settings() {
           <Card>
             <BlockStack gap="300">
               <Check label="Product reviews enabled" name="productReviewsEnabled" checked={productSettings.productReviewsEnabled} />
-              <Check label="Auto approve reviews" name="autoApproveReviews" checked={productSettings.autoApproveReviews} />
               <Check label="Require email" name="requireEmail" checked={productSettings.requireEmail} />
               <Check label="Show verified badge" name="showVerifiedBadge" checked={productSettings.showVerifiedBadge} />
               <Check label="Allow photo reviews" name="allowPhotoReviews" checked={productSettings.allowPhotoReviews} />
