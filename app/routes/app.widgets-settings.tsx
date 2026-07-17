@@ -349,7 +349,13 @@ export default function WidgetsSettings() {
           {brandTrustWidgets.map((widget) => {
             const canInstall = Boolean(brandSlug);
             return (
-            <WidgetCard key={widget.title} title={widget.title} description={widget.description} image={widget.image}>
+            <WidgetCard
+              key={widget.title}
+              title={widget.title}
+              description={widget.description}
+              image={widget.image}
+              instructions={<BrandWidgetInstallInstructions />}
+            >
               {!canInstall ? <Text as="p" tone="critical">Enter your brand name before installing this widget.</Text> : null}
               <ButtonGroup>
                 <Button url={themeEditorUrl} target="_blank" disabled={!canInstall}>Install</Button>
@@ -403,7 +409,19 @@ function WidgetSection({ title, children }: { title: string; children: React.Rea
   );
 }
 
-function WidgetCard({ title, description, image, children }: { title: string; description: string; image: string; children: React.ReactNode }) {
+function WidgetCard({
+  title,
+  description,
+  image,
+  instructions,
+  children
+}: {
+  title: string;
+  description: string;
+  image: string;
+  instructions?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <Card padding="0">
       <BlockStack gap="0">
@@ -425,12 +443,25 @@ function WidgetCard({ title, description, image, children }: { title: string; de
               <Text as="h3" variant="headingMd">{title}</Text>
             </InlineStack>
             <Text as="p" tone="subdued">{description}</Text>
-            <Text as="p" tone="subdued">Instruction: click Add section → Add app → choose the one you want.</Text>
+            {instructions || <Text as="p" tone="subdued">Instruction: click Add section → Add app → choose the one you want.</Text>}
             <BlockStack gap="300">{children}</BlockStack>
           </BlockStack>
         </Box>
       </BlockStack>
     </Card>
+  );
+}
+
+function BrandWidgetInstallInstructions() {
+  return (
+    <BlockStack gap="100">
+      <Text as="p" tone="subdued">
+        <strong>Online Store 2.0 / JSON theme:</strong> click <strong>Install</strong>, then go to <strong>Add section → Apps</strong> and choose this widget.
+      </Text>
+      <Text as="p" tone="subdued">
+        <strong>Legacy Liquid theme:</strong> click <strong>Manual install</strong>, copy the code, then paste it into a <strong>Custom Liquid/HTML</strong> section or the theme file where you want it displayed.
+      </Text>
+    </BlockStack>
   );
 }
 
