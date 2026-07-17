@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import prisma from "~/db.server";
-import { assertCanSubmitStorefrontReview, getShopEntitlements, PlanLimitError } from "~/models/entitlements.server";
+import { getShopEntitlements } from "~/models/entitlements.server";
 import { sendReviewNotification } from "~/models/notifications.server";
 import {
   clampRating,
@@ -80,29 +80,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     ? await request.json()
     : Object.fromEntries(await request.formData());
   const shopDomain = requiredString(payload.shop || payload.shopDomain, "shop");
-  let review;
-  try {
-    await assertCanSubmitStorefrontReview(shopDomain);
-    review = await createProductReview({
-      shopDomain,
-      productId: requiredString(payload.productId, "productId"),
-      productHandle: String(payload.productHandle || ""),
-      productTitle: String(payload.productTitle || ""),
-      customerName: requiredString(payload.customerName || payload.name, "name"),
-      customerEmail: String(payload.customerEmail || payload.email || ""),
-      rating: clampRating(payload.rating),
-      title: requiredString(payload.title, "title"),
-      content: requiredString(payload.content, "content"),
-      imageUrl: String(payload.imageUrl || ""),
-      verifiedPurchase: false,
-      source: "STOREFRONT"
-    });
-  } catch (error) {
-    if (error instanceof PlanLimitError) {
-      return corsJson({ ok: false, error: error.message, message: error.message }, { status: error.status });
-    }
-    throw error;
-  }
+  const review = await createProductReview({
+    shopDomain,
+    productId: requiredString(payload.productId, "productId"),
+    productHandle: String(payload.productHandle || ""),
+    productTitle: String(payload.productTitle || ""),
+    customerName: requiredString(payload.customerName || payload.name, "name"),
+    customerEmail: String(payload.customerEmail || payload.email || ""),
+    rating: clampRating(payload.rating),
+    title: requiredString(payload.title, "title"),
+    content: requiredString(payload.content, "content"),
+    imageUrl: String(payload.imageUrl || ""),
+    verifiedPurchase: false,
+    source: "STOREFRONT"
+  });
   await sendReviewNotification(shopDomain, review);
 
   return corsJson({

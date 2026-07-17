@@ -2,7 +2,7 @@ import prisma from "~/db.server";
 import { PRO_PLAN } from "~/models/billing-plans";
 import { isBillingTestMode, isFreeProShop } from "~/shopify.server";
 
-export const FREE_MONTHLY_REVIEW_LIMIT = 50;
+export const FREE_MONTHLY_IMPORT_LIMIT = 30;
 export const FREE_MONTHLY_DELETE_LIMIT = 5;
 
 export type AppPlan = "FREE" | "PRO";
@@ -75,40 +75,23 @@ export async function getShopEntitlements(shopDomain: string): Promise<ShopEntit
 }
 
 export async function getMonthlyPlanUsage(shopDomain: string, now = new Date()) {
-  const { start, end, monthKey } = calendarMonth(now);
-  const [reviewSubmissions, usage] = await Promise.all([
-    prisma.productReview.count({
-      where: {
-        shopDomain,
-        source: "STOREFRONT",
-        createdAt: { gte: start, lt: end }
-      }
-    }),
-    prisma.monthlyPlanUsage.findUnique({
-      where: { shopDomain_monthKey: { shopDomain, monthKey } },
-      select: { reviewDeletions: true }
-    })
-  ]);
+  const { monthKey } = calendarMonth(now);
+  const usage = await prisma.monthlyPlanUsage.findUnique({
+    where: { shopDomain_monthKey: { shopDomain, monthKey } },
+    select: { reviewImports: true, reviewDeletions: true }
+  });
 
   return {
     monthKey,
-    reviewSubmissions,
+    reviewImports: usage?.reviewImports || 0,
     reviewDeletions: usage?.reviewDeletions || 0,
-    reviewLimit: FREE_MONTHLY_REVIEW_LIMIT,
+    importLimit: FREE_MONTHLY_IMPORT_LIMIT,
     deleteLimit: FREE_MONTHLY_DELETE_LIMIT
   };
 }
 
-export async function assertCanSubmitStorefrontReview(shopDomain: string) {
-  const entitlements = await getShopEntitlements(shopDomain);
-  if (entitlements.isPro) return;
-
-  const usage = await getMonthlyPlanUsage(shopDomain);
-  if (usage.reviewSubmissions >= FREE_MONTHLY_REVIEW_LIMIT) {
-    throw new PlanLimitError(
-      `This store has reached the Free plan limit of ${FREE_MONTHLY_REVIEW_LIMIT} customer reviews this month. Please ask the store owner to upgrade to Pro.`
-    );
-  }
+export function currentPlanMonthKey(now = new Date()) {
+  return calendarMonth(now).monthKey;
 }
 
 export async function deleteProductReviewWithPlanLimit(shopDomain: string, reviewId: string) {

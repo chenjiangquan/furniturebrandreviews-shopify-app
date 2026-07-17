@@ -272,6 +272,7 @@ model MonthlyPlanUsage {
   id              String   @id @default(cuid())
   shopDomain      String
   monthKey        String
+  reviewImports   Int      @default(0)
   reviewDeletions Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

@@ -1,0 +1,2 @@
+ALTER TABLE "MonthlyPlanUsage"
+ADD COLUMN "reviewImports" INTEGER NOT NULL DEFAULT 0;

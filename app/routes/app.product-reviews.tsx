@@ -21,7 +21,9 @@ import {
 } from "@shopify/polaris";
 import prisma from "~/db.server";
 import {
+  currentPlanMonthKey,
   deleteProductReviewWithPlanLimit,
+  FREE_MONTHLY_IMPORT_LIMIT,
   getMonthlyPlanUsage,
   PlanLimitError,
   syncAdminEntitlements
@@ -131,7 +133,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { billing, session } = await authenticate.admin(request);
-  await syncAdminEntitlements(session.shop, billing);
+  const entitlements = await syncAdminEntitlements(session.shop, billing);
   const form = await request.formData();
   const intent = String(form.get("intent"));
   const id = String(form.get("id") || "");
@@ -201,7 +203,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return { ok: false, error: "CSV file is required." };
       }
 
-      const importResult = await importReviewsFromCsv(session.shop, await file.text());
+      const importResult = await importReviewsFromCsv(session.shop, await file.text(), entitlements.isPro);
       return { ok: true, error: "", ...importResult };
     } catch (error) {
       console.error("CSV import failed", error);
@@ -313,9 +315,9 @@ export default function ProductReviews() {
         <ImportReviewsModal open={importOpen} onClose={() => setImportOpen(false)} />
 
         {!entitlements.isPro ? (
-          <Banner title="Free plan monthly usage" tone="info" action={{ content: "Upgrade to Pro", url: "/app" }}>
+          <Banner title="Free plan monthly import usage" tone="info" action={{ content: "Upgrade to Pro", url: "/app" }}>
             <Text as="p">
-              Customer reviews: {usage.reviewSubmissions}/{usage.reviewLimit} · Deleted reviews: {usage.reviewDeletions}/{usage.deleteLimit}. Usage resets at the start of each UTC calendar month.
+              Imported reviews: {usage.reviewImports}/{usage.importLimit} · Deleted reviews: {usage.reviewDeletions}/{usage.deleteLimit}. Storefront customer reviews are unlimited. Usage resets at the start of each UTC calendar month.
             </Text>
           </Banner>
         ) : null}
@@ -1096,7 +1098,7 @@ function formatCreated(value: string | Date) {
   return createdAt.toLocaleDateString();
 }
 
-async function importReviewsFromCsv(shopDomain: string, csvText: string) {
+async function importReviewsFromCsv(shopDomain: string, csvText: string, isPro: boolean) {
   await ensureShop(shopDomain);
   const rows = parseCsv(csvText);
   const [header = [], ...records] = rows;
@@ -1207,10 +1209,47 @@ async function importReviewsFromCsv(shopDomain: string, csvText: string) {
   });
 
   const batchSize = 500;
-  for (let index = 0; index < reviewsToCreate.length; index += batchSize) {
-    const batch = reviewsToCreate.slice(index, index + batchSize);
-    const result = await prisma.productReview.createMany({ data: batch });
-    importedCount += result.count;
+  if (isPro) {
+    for (let index = 0; index < reviewsToCreate.length; index += batchSize) {
+      const batch = reviewsToCreate.slice(index, index + batchSize);
+      const result = await prisma.productReview.createMany({ data: batch });
+      importedCount += result.count;
+    }
+  } else {
+    const monthKey = currentPlanMonthKey();
+    importedCount = await prisma.$transaction(async (tx) => {
+      await tx.monthlyPlanUsage.upsert({
+        where: { shopDomain_monthKey: { shopDomain, monthKey } },
+        update: {},
+        create: { shopDomain, monthKey }
+      });
+      const reserved = await tx.monthlyPlanUsage.updateMany({
+        where: {
+          shopDomain,
+          monthKey,
+          reviewImports: { lte: FREE_MONTHLY_IMPORT_LIMIT - reviewsToCreate.length }
+        },
+        data: { reviewImports: { increment: reviewsToCreate.length } }
+      });
+      if (!reserved.count) {
+        const usage = await tx.monthlyPlanUsage.findUnique({
+          where: { shopDomain_monthKey: { shopDomain, monthKey } },
+          select: { reviewImports: true }
+        });
+        const remaining = Math.max(0, FREE_MONTHLY_IMPORT_LIMIT - (usage?.reviewImports || 0));
+        throw new PlanLimitError(
+          `Free plan imports are limited to ${FREE_MONTHLY_IMPORT_LIMIT} reviews per month. This file has ${reviewsToCreate.length} new reviews, but only ${remaining} can still be imported this month. Upgrade to Pro for unlimited imports.`
+        );
+      }
+
+      let createdCount = 0;
+      for (let index = 0; index < reviewsToCreate.length; index += batchSize) {
+        const batch = reviewsToCreate.slice(index, index + batchSize);
+        const result = await tx.productReview.createMany({ data: batch });
+        createdCount += result.count;
+      }
+      return createdCount;
+    });
   }
 
   return { importedCount, skippedCount };
