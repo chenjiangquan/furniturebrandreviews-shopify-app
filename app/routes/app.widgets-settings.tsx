@@ -83,7 +83,7 @@ const CLAIM_PROFILE_URL = "https://www.furniturebrandreviews.com/claim-your-prof
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
-  const entitlements = await getShopEntitlements(shopDomain);
+  const entitlementsPromise = getShopEntitlements(shopDomain);
   let widgetSettings = {
     brandName: defaultBrandProfile.brandName,
     brandSlug: defaultBrandProfile.brandSlug,
@@ -128,6 +128,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   } catch (error) {
     console.error("Widgets Settings loader failed; rendering fallback UI", error);
   }
+  const entitlements = await entitlementsPromise;
 
   const productThemeEditorUrl = `https://${session.shop}/admin/themes/current/editor?template=product`;
   const homeThemeEditorUrl = `https://${session.shop}/admin/themes/current/editor?template=index`;

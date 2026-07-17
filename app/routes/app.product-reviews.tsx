@@ -47,7 +47,7 @@ const pageSizeOptions = [20, 30];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  const entitlements = await getShopEntitlements(session.shop);
+  const entitlementsPromise = getShopEntitlements(session.shop);
   const url = new URL(request.url);
   const query = (url.searchParams.get("q") || "").trim();
   const rating = url.searchParams.get("rating") || "";
@@ -107,7 +107,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
   }
 
-  const [reviews, reviewCount, questions, usage] = await Promise.all([
+  const [reviews, reviewCount, questions, usage, entitlements] = await Promise.all([
     view === "reviews"
       ? prisma.productReview.findMany({
           where,
@@ -120,7 +120,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     view === "questions"
       ? prisma.productQuestion.findMany({ where: questionWhere, orderBy: { createdAt: "desc" }, take: 100 })
       : Promise.resolve([]),
-    getMonthlyPlanUsage(session.shop)
+    getMonthlyPlanUsage(session.shop),
+    entitlementsPromise
   ]);
   const totalPages = Math.max(1, Math.ceil(reviewCount / perPage));
 

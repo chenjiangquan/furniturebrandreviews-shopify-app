@@ -103,8 +103,10 @@ const textFields = [
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  const entitlements = await getShopEntitlements(session.shop);
-  const settings = await getProductReviewWidgetSettings(session.shop);
+  const [entitlements, settings] = await Promise.all([
+    getShopEntitlements(session.shop),
+    getProductReviewWidgetSettings(session.shop)
+  ]);
   return {
     entitlements,
     settings: entitlements.isPro ? settings : { ...settings, layoutType: "standard" }

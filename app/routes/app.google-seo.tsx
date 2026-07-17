@@ -17,12 +17,14 @@ import { authenticate } from "~/shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  const entitlements = await getShopEntitlements(session.shop);
-  const settings = await prisma.googleSeoSettings.upsert({
-    where: { shopDomain: session.shop },
-    update: {},
-    create: { shopDomain: session.shop }
-  });
+  const [entitlements, settings] = await Promise.all([
+    getShopEntitlements(session.shop),
+    prisma.googleSeoSettings.upsert({
+      where: { shopDomain: session.shop },
+      update: {},
+      create: { shopDomain: session.shop }
+    })
+  ]);
 
   return { settings, entitlements };
 };
