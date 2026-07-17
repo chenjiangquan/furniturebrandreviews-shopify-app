@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { useFetcher, useLoaderData, useNavigate, type ShouldRevalidateFunctionArgs } from "@remix-run/react";
+import { Link as RemixLink, useFetcher, useLoaderData, useNavigate, type ShouldRevalidateFunctionArgs } from "@remix-run/react";
 import * as React from "react";
 import {
   Badge,
@@ -237,6 +237,7 @@ export default function ProductReviewWidgetSettings() {
       subtitle="Customize the Theme App Extension block without editing theme code."
       backAction={{ content: "Widgets Settings", onAction: () => navigate("/app/widgets-settings") }}
     >
+      <RemixLink to="/app/widgets-settings" prefetch="render" aria-hidden tabIndex={-1} style={{ display: "none" }} />
       <fetcher.Form method="post">
         <HiddenSettings settings={draft} />
         <InlineGrid columns={{ xs: 1, lg: "360px 1fr" }} gap="500">

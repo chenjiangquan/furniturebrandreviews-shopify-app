@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { useFetcher, useLoaderData, useNavigate, type ShouldRevalidateFunctionArgs } from "@remix-run/react";
+import { Link as RemixLink, useFetcher, useLoaderData, useNavigate, type ShouldRevalidateFunctionArgs } from "@remix-run/react";
 import * as React from "react";
 import {
   Badge,
@@ -74,6 +74,7 @@ export default function GoogleSeoSettings() {
       subtitle="Manage review visibility settings for search, rich snippets, and review feeds."
       backAction={{ content: "Widgets Settings", onAction: () => navigate("/app/widgets-settings") }}
     >
+      <RemixLink to="/app/widgets-settings" prefetch="render" aria-hidden tabIndex={-1} style={{ display: "none" }} />
       <fetcher.Form method="post">
         <input type="hidden" name="seoRichSnippetsEnabled" value={draft.seoRichSnippetsEnabled ? "on" : ""} />
         <input type="hidden" name="googleShoppingEnabled" value={draft.googleShoppingEnabled ? "on" : ""} />

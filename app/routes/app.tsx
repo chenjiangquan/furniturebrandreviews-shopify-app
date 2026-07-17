@@ -15,9 +15,9 @@ export default function AdminApp() {
   return (
     <>
       <NavMenu>
-        <Link to="/app" rel="home">Dashboard</Link>
-        <Link to="/app/product-reviews">Product Reviews</Link>
-        <Link to="/app/widgets-settings">Widgets Settings</Link>
+        <Link to="/app" rel="home" prefetch="intent">Dashboard</Link>
+        <Link to="/app/product-reviews" prefetch="intent">Product Reviews</Link>
+        <Link to="/app/widgets-settings" prefetch="intent">Widgets Settings</Link>
       </NavMenu>
       <Outlet />
       <AdminLiveChatButton />

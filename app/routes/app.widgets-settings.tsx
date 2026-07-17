@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { useFetcher, useLoaderData, useNavigate, type ShouldRevalidateFunctionArgs } from "@remix-run/react";
+import { Link as RemixLink, useFetcher, useLoaderData, useNavigate, type ShouldRevalidateFunctionArgs } from "@remix-run/react";
 import * as React from "react";
 import {
   Badge,
@@ -287,6 +287,9 @@ export default function WidgetsSettings() {
       title="Widgets Settings"
       subtitle="Manage storefront widgets through Theme App Extension blocks."
     >
+      <RemixLink to="/app/widgets/review-widget" prefetch="render" aria-hidden tabIndex={-1} style={{ display: "none" }} />
+      <RemixLink to="/app/widgets/star-rating-badge" prefetch="render" aria-hidden tabIndex={-1} style={{ display: "none" }} />
+      {entitlements.isPro ? <RemixLink to="/app/google-seo" prefetch="render" aria-hidden tabIndex={-1} style={{ display: "none" }} /> : null}
       <BlockStack gap="500">
         <WidgetSection title="Product Review Widgets">
           {productReviewWidgets.map((widget) => {

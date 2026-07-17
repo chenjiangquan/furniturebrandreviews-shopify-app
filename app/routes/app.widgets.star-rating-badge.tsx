@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { useFetcher, useLoaderData, useNavigate, type ShouldRevalidateFunctionArgs } from "@remix-run/react";
+import { Link as RemixLink, useFetcher, useLoaderData, useNavigate, type ShouldRevalidateFunctionArgs } from "@remix-run/react";
 import {
   Badge,
   BlockStack,
@@ -72,6 +72,7 @@ export default function StarRatingBadgeCustomize() {
 
   return (
     <Page fullWidth title="Star Rating Badge" backAction={{ content: "Widgets Settings", onAction: () => navigate("/app/widgets-settings") }}>
+      <RemixLink to="/app/widgets-settings" prefetch="render" aria-hidden tabIndex={-1} style={{ display: "none" }} />
       <InlineGrid columns={{ xs: 1, md: "360px 1fr" }} gap="500">
         <fetcher.Form method="post">
           <Card>
