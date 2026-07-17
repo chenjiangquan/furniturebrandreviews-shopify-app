@@ -56,7 +56,8 @@ const booleanFields = [
   "showReviewHighlights",
   "showPhotoSummary",
   "showReviewerPhotos",
-  "hideReviewDate"
+  "hideReviewDate",
+  "hideNoReviewProduct"
 ] as const;
 
 const numberFields = [
@@ -314,6 +315,7 @@ export default function ProductReviewWidgetSettings() {
                 <Divider />
                 <Toggle label="Show verified badge" checked={draft.showVerifiedBadge} onChange={(value) => setValue("showVerifiedBadge", value)} />
                 <Toggle label="Hide review date" checked={draft.hideReviewDate} onChange={(value) => setValue("hideReviewDate", value)} />
+                <Toggle label="Hide no review product" checked={draft.hideNoReviewProduct} onChange={(value) => setValue("hideNoReviewProduct", value)} />
               </BlockStack>
             </Card>
 

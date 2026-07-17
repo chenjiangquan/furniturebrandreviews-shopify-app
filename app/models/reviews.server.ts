@@ -177,7 +177,7 @@ export async function getProductReviewSummary(
     questionMatchFilters.push({ productTitle });
   }
 
-  const [directPublishedReviews, titleFallbackReviews, questions] = await Promise.all([
+  const [directPublishedReviews, questions] = await Promise.all([
     prisma.productReview.findMany({
       where: {
         shopDomain,
@@ -186,17 +186,6 @@ export async function getProductReviewSummary(
       },
       orderBy: { createdAt: "desc" }
     }),
-    normalizedCurrentTitle || currentTokens.length > 0
-      ? prisma.productReview.findMany({
-          where: {
-            shopDomain,
-            status: { in: publishedReviewStatuses },
-            ...productCandidateWhere(productHandle, productTitle)
-          },
-          orderBy: { createdAt: "desc" },
-          take: 2500
-        })
-      : Promise.resolve([]),
     prisma.productQuestion.findMany({
       where: {
         shopDomain,
@@ -207,6 +196,17 @@ export async function getProductReviewSummary(
       take: 25
     })
   ]);
+  const titleFallbackReviews = directPublishedReviews.length === 0 && (normalizedCurrentTitle || currentTokens.length > 0)
+    ? await prisma.productReview.findMany({
+        where: {
+          shopDomain,
+          status: { in: publishedReviewStatuses },
+          ...productCandidateWhere(productHandle, productTitle)
+        },
+        orderBy: { createdAt: "desc" },
+        take: 2500
+      })
+    : [];
   const reviewMap = new Map<string, ProductReview>();
   for (const review of directPublishedReviews) {
     reviewMap.set(review.id, review);
@@ -248,27 +248,25 @@ export async function getProductReviewRatingSummary(
     reviewMatchFilters.push({ productTitle });
   }
 
-  const [directPublishedReviews, titleFallbackReviews] = await Promise.all([
-    prisma.productReview.findMany({
-      where: {
-        shopDomain,
-        status: { in: publishedReviewStatuses },
-        ...(reviewMatchFilters.length ? { OR: reviewMatchFilters } : { id: "__no_product_match__" })
-      },
-      select: { id: true, rating: true, productTitle: true, productHandle: true }
-    }),
-    normalizedCurrentTitle || currentTokens.length > 0
-      ? prisma.productReview.findMany({
-          where: {
-            shopDomain,
-            status: { in: publishedReviewStatuses },
-            ...productCandidateWhere(productHandle, productTitle)
-          },
-          select: { id: true, rating: true, productTitle: true, productHandle: true },
-          take: 2500
-        })
-      : Promise.resolve([])
-  ]);
+  const directPublishedReviews = await prisma.productReview.findMany({
+    where: {
+      shopDomain,
+      status: { in: publishedReviewStatuses },
+      ...(reviewMatchFilters.length ? { OR: reviewMatchFilters } : { id: "__no_product_match__" })
+    },
+    select: { id: true, rating: true, productTitle: true, productHandle: true }
+  });
+  const titleFallbackReviews = directPublishedReviews.length === 0 && (normalizedCurrentTitle || currentTokens.length > 0)
+    ? await prisma.productReview.findMany({
+        where: {
+          shopDomain,
+          status: { in: publishedReviewStatuses },
+          ...productCandidateWhere(productHandle, productTitle)
+        },
+        select: { id: true, rating: true, productTitle: true, productHandle: true },
+        take: 2500
+      })
+    : [];
 
   const reviewMap = new Map<string, { id: string; rating: number; productTitle: string | null; productHandle: string | null }>();
   for (const review of directPublishedReviews) {

@@ -40,11 +40,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         backgroundColor: settings.starRatingBadgeBackgroundColor,
         borderColor: settings.starRatingBadgeBorderColor,
         borderWidth: settings.starRatingBadgeBorderWidth,
-        borderRadius: settings.starRatingBadgeBorderRadius
+        borderRadius: settings.starRatingBadgeBorderRadius,
+        hideNoReviewProduct: settings.starRatingBadgeHideNoReviewProduct
       }
     }, {
       headers: {
-        "Cache-Control": "public, max-age=60, stale-while-revalidate=300"
+        "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600"
       }
     });
   }
@@ -61,13 +62,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return corsJson({
     ...summary,
     seoRichSnippetsEnabled: entitlements.isPro && Boolean(googleSeoSettings?.seoRichSnippetsEnabled),
+    starRatingBadgeSettings: {
+      starColor: settings.starRatingBadgeStarColor,
+      textColor: settings.starRatingBadgeTextColor,
+      backgroundColor: settings.starRatingBadgeBackgroundColor,
+      borderColor: settings.starRatingBadgeBorderColor,
+      borderWidth: settings.starRatingBadgeBorderWidth,
+      borderRadius: settings.starRatingBadgeBorderRadius,
+      hideNoReviewProduct: settings.starRatingBadgeHideNoReviewProduct
+    },
     widgetSettings: {
       ...widgetSettings,
       layoutType: entitlements.isPro ? widgetSettings.layoutType : "standard"
     }
   }, {
     headers: {
-      "Cache-Control": "public, max-age=30, stale-while-revalidate=300"
+      "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600"
     }
   });
 };

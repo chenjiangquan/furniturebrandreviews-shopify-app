@@ -84,10 +84,11 @@ export default function GoogleSeoSettings() {
               <Text as="p">Upgrade to enable SEO Rich Snippets, Google Shopping, and Furniture Brand Reviews discovery features.</Text>
             </Banner>
           ) : null}
-          <InlineStack align="space-between" blockAlign="center" gap="300">
-            <Button onClick={() => navigate("/app/widgets-settings")}>Back to Widgets Settings</Button>
-            {fetcher.data?.ok ? <Badge tone="success">Saved</Badge> : null}
-          </InlineStack>
+          {fetcher.data?.ok ? (
+            <InlineStack align="end">
+              <Badge tone="success">Saved</Badge>
+            </InlineStack>
+          ) : null}
 
           <BlockStack gap="300">
             <Text as="h2" variant="headingLg">Sell more with Furniture Brand Reviews</Text>

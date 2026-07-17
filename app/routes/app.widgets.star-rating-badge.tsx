@@ -5,6 +5,7 @@ import {
   BlockStack,
   Button,
   Card,
+  Checkbox,
   ColorPicker,
   InlineGrid,
   InlineStack,
@@ -44,7 +45,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     starRatingBadgeBackgroundColor: color("backgroundColor", "#ffffff"),
     starRatingBadgeBorderColor: color("borderColor", "#dfe3e8"),
     starRatingBadgeBorderWidth: number("borderWidth", 0, 4, 1),
-    starRatingBadgeBorderRadius: number("borderRadius", 0, 24, 8)
+    starRatingBadgeBorderRadius: number("borderRadius", 0, 24, 8),
+    starRatingBadgeHideNoReviewProduct: formData.get("hideNoReviewProduct") === "true"
   };
 
   await prisma.productReviewSettings.upsert({
@@ -64,6 +66,7 @@ export default function StarRatingBadgeCustomize() {
   const [borderColor, setBorderColor] = React.useState(settings.starRatingBadgeBorderColor);
   const [borderWidth, setBorderWidth] = React.useState(settings.starRatingBadgeBorderWidth);
   const [radius, setRadius] = React.useState(settings.starRatingBadgeBorderRadius);
+  const [hideNoReviewProduct, setHideNoReviewProduct] = React.useState(settings.starRatingBadgeHideNoReviewProduct);
   const saving = fetcher.state !== "idle";
 
   return (
@@ -84,6 +87,8 @@ export default function StarRatingBadgeCustomize() {
               <RangeSlider label="Border size" min={0} max={4} value={borderWidth} onChange={(value) => setBorderWidth(Number(value))} output />
               <input type="hidden" name="borderRadius" value={radius} />
               <RangeSlider label="Border radius" min={0} max={24} value={radius} onChange={(value) => setRadius(Number(value))} output />
+              <input type="hidden" name="hideNoReviewProduct" value={String(hideNoReviewProduct)} />
+              <Checkbox label="Hide no review product" checked={hideNoReviewProduct} onChange={setHideNoReviewProduct} />
               <Button submit variant="primary" loading={saving}>Save</Button>
             </BlockStack>
           </Card>

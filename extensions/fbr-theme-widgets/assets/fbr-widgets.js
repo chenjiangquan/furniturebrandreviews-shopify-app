@@ -12,6 +12,7 @@
   const productReviewUrl = (el) => `${apiBase(el)}/api/product-reviews?shop=${encodeURIComponent(shop(el))}&productId=${encodeURIComponent(el.dataset.productId || "")}&productHandle=${encodeURIComponent(el.dataset.productHandle || "")}&productTitle=${encodeURIComponent(el.dataset.productTitle || "")}`;
   const productReviewSummaryUrl = (el) => `${productReviewUrl(el)}&summaryOnly=1`;
   const fetchCache = new Map();
+  const inflightFetches = new Map();
   const fetchCacheTtl = 60000;
   const persistentCacheTtl = 60000;
   const persistentCachePrefix = "fbr_cache_v2:";
@@ -58,6 +59,8 @@
     photoSummaryLimit: 8,
     showVerifiedBadge: true,
     showReviewerPhotos: true,
+    hideNoReviewProduct: false,
+    starRatingBadgeHideNoReviewProduct: false,
     layoutType: "standard",
     carouselCardsPerRow: 3,
     carouselAutoSlide: false,
@@ -77,20 +80,29 @@
       const cached = fetchCache.get(url);
       if (cached && cached.expires > now) return cached.data;
       if (cached) fetchCache.delete(url);
+      if (inflightFetches.has(url)) return inflightFetches.get(url);
     }
-    const response = await fetch(url, options);
-    const text = await response.text();
-    let data = {};
+    const request = (async () => {
+      const response = await fetch(url, options);
+      const text = await response.text();
+      let data = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = { error: text };
+      }
+      if (!response.ok || data.ok === false) {
+        throw new Error(data.error || data.message || "Request failed");
+      }
+      if (cacheable) fetchCache.set(url, { data, expires: Date.now() + fetchCacheTtl });
+      return data;
+    })();
+    if (cacheable) inflightFetches.set(url, request);
     try {
-      data = text ? JSON.parse(text) : {};
-    } catch {
-      data = { error: text };
+      return await request;
+    } finally {
+      if (cacheable) inflightFetches.delete(url);
     }
-    if (!response.ok || data.ok === false) {
-      throw new Error(data.error || data.message || "Request failed");
-    }
-    if (cacheable) fetchCache.set(url, { data, expires: now + fetchCacheTtl });
-    return data;
   }
 
   function persistentCacheKey(url) {
@@ -288,7 +300,22 @@
 
   function renderProductStars(el, data) {
     const computedStyles = window.getComputedStyle(el);
-    const badge = (data && data.starRatingBadgeSettings) || {};
+    const widgetSettings = (data && data.widgetSettings) || {};
+    const badge = (data && data.starRatingBadgeSettings) || {
+      starColor: widgetSettings.starRatingBadgeStarColor,
+      textColor: widgetSettings.starRatingBadgeTextColor,
+      backgroundColor: widgetSettings.starRatingBadgeBackgroundColor,
+      borderColor: widgetSettings.starRatingBadgeBorderColor,
+      borderWidth: widgetSettings.starRatingBadgeBorderWidth,
+      borderRadius: widgetSettings.starRatingBadgeBorderRadius,
+      hideNoReviewProduct: widgetSettings.starRatingBadgeHideNoReviewProduct
+    };
+    if (badge.hideNoReviewProduct && Number(data.reviewCount) === 0) {
+      el.innerHTML = "";
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
     const settings = {
       ...defaultProductSettings,
       starColor: badge.starColor || computedStyles.getPropertyValue("--fbr-star").trim() || defaultProductSettings.starColor,
@@ -415,6 +442,12 @@
       el.innerHTML = "";
       return;
     }
+    if (settings.hideNoReviewProduct && Number(data.reviewCount) === 0) {
+      el.innerHTML = "";
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
 
     el.__fbrReviewData = data;
     el.__fbrReviewSettings = settings;
@@ -1273,7 +1306,8 @@
     document.querySelectorAll("[data-fbr-product-stars]").forEach(async (el) => {
       if (el.dataset.fbrRendered === "true") return;
       el.dataset.fbrRendered = "true";
-      const url = productReviewSummaryUrl(el);
+      const hasProductReviewWidget = Boolean(document.querySelector("[data-fbr-product-reviews]"));
+      const url = hasProductReviewWidget ? productReviewUrl(el) : productReviewSummaryUrl(el);
       let renderedFromCache = false;
       const cached = readPersistentCache(url);
       if (cached) {
