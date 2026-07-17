@@ -7,7 +7,10 @@
     return "★★★★★".slice(0, rounded) + "☆☆☆☆☆".slice(0, Math.max(0, 5 - rounded));
   };
 
-  const apiBase = (el) => (el.dataset.apiBase || "/apps/fbr").replace(/\/$/, "");
+  const apiBase = (el) => {
+    const configuredBase = (el.dataset.apiBase || "/apps/fbr").replace(/\/$/, "");
+    return configuredBase === "/apps/fbr" ? "https://app.furniturebrandreviews.com" : configuredBase;
+  };
   const shop = (el) => el.dataset.shop;
   const productReviewUrl = (el) => `${apiBase(el)}/api/product-reviews?shop=${encodeURIComponent(shop(el))}&productId=${encodeURIComponent(el.dataset.productId || "")}&productHandle=${encodeURIComponent(el.dataset.productHandle || "")}&productTitle=${encodeURIComponent(el.dataset.productTitle || "")}`;
   const productReviewSummaryUrl = (el) => `${productReviewUrl(el)}&summaryOnly=1`;
