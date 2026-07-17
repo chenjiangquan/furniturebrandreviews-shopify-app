@@ -29,15 +29,31 @@ export async function syncAdminEntitlements(shopDomain: string, billing: any): P
     return { plan: "PRO", planSource: "FREE_PARTNER", isPro: true };
   }
 
-  const check = await billing.check({ plans: [PRO_PLAN], isTest: isBillingTestMode() });
-  const plan: AppPlan = check.hasActivePayment ? "PRO" : "FREE";
-  await persistPlan(shopDomain, plan);
+  const persistedEntitlements = await getShopEntitlements(shopDomain);
 
-  return {
-    plan,
-    planSource: plan === "PRO" ? "BILLING" : "FREE",
-    isPro: plan === "PRO"
-  };
+  try {
+    const check = await billing.check({ plans: [PRO_PLAN], isTest: isBillingTestMode() });
+    const plan: AppPlan = check.hasActivePayment ? "PRO" : "FREE";
+    await persistPlan(shopDomain, plan);
+
+    return {
+      plan,
+      planSource: plan === "PRO" ? "BILLING" : "FREE",
+      isPro: plan === "PRO"
+    };
+  } catch (error) {
+    // Shopify App Pricing can temporarily make the legacy Billing API status
+    // unavailable. A billing lookup must never prevent a merchant from opening
+    // the app. New shops already resolve to FREE, while a previously verified
+    // paid plan remains available until Shopify can be checked again.
+    console.warn("Billing status check failed; using persisted app plan", {
+      shopDomain,
+      persistedPlan: persistedEntitlements.plan,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    await persistPlan(shopDomain, persistedEntitlements.plan);
+    return persistedEntitlements;
+  }
 }
 
 export async function getShopEntitlements(shopDomain: string): Promise<ShopEntitlements> {

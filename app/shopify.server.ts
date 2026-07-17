@@ -101,6 +101,11 @@ const shopify = shopifyApp({
           update: {},
           create: { shopDomain: session.shop }
         }),
+        prisma.subscriptionSettings.upsert({
+          where: { shopDomain: session.shop },
+          update: {},
+          create: { shopDomain: session.shop, plan: "FREE" }
+        }),
         prisma.brandWidgetData.upsert({
           where: { shopDomain: session.shop },
           update: {},
