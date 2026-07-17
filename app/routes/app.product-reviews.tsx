@@ -33,10 +33,6 @@ import { authenticate } from "~/shopify.server";
 
 type QuestionStatus = "PENDING" | "PUBLISHED";
 
-const tabs = [
-  { id: "all", content: "All Reviews" }
-];
-
 const viewTabs = [
   { id: "reviews", content: "Reviews" },
   { id: "questions", content: "Questions" }
@@ -240,7 +236,6 @@ export default function ProductReviews() {
   const [params, setParams] = useSearchParams();
   const navigation = useNavigation();
   const selectedView = params.get("view") === "questions" ? "questions" : "reviews";
-  const selectedTab = Math.max(0, tabs.findIndex((tab) => tab.id === (params.get("tab") || "all")));
   const selectedViewTab = selectedView === "questions" ? 1 : 0;
   const busy = navigation.state !== "idle";
   const optimisticPerPage = navigation.location
@@ -323,45 +318,27 @@ export default function ProductReviews() {
         ) : null}
 
         <Card padding="0">
-          <Tabs
-            tabs={viewTabs}
-            selected={selectedViewTab}
-            onSelect={(index) => {
-              const next = new URLSearchParams(params);
-              if (viewTabs[index].id === "questions") {
-                next.set("view", "questions");
-                next.delete("tab");
-                next.delete("status");
-                next.delete("rating");
-                next.delete("picture");
-                next.set("page", "1");
-              } else {
-                next.delete("view");
-                next.set("page", "1");
-              }
-              setParams(next);
-            }}
-          />
-        </Card>
-
-        <Card padding="0">
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "0 16px", minHeight: 56 }}>
-            <div style={{ flex: "1 1 540px", minWidth: 0 }}>
-              {selectedView === "reviews" ? (
-                <Tabs
-                  tabs={tabs}
-                  selected={selectedTab}
-                  onSelect={(index) => {
-                    const next = new URLSearchParams(params);
-                    next.set("tab", tabs[index].id);
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "0 16px 0 0", minHeight: 56 }}>
+            <div style={{ flex: "0 1 auto", minWidth: 220 }}>
+              <Tabs
+                tabs={viewTabs}
+                selected={selectedViewTab}
+                onSelect={(index) => {
+                  const next = new URLSearchParams(params);
+                  if (viewTabs[index].id === "questions") {
+                    next.set("view", "questions");
+                    next.delete("tab");
                     next.delete("status");
+                    next.delete("rating");
+                    next.delete("picture");
                     next.set("page", "1");
-                    setParams(next);
-                  }}
-                />
-              ) : (
-                <Text as="p" variant="headingSm">Customer questions</Text>
-              )}
+                  } else {
+                    next.delete("view");
+                    next.set("page", "1");
+                  }
+                  setParams(next);
+                }}
+              />
             </div>
             <InlineStack gap="200" blockAlign="center" wrap={false}>
               {selectedView === "reviews" ? (

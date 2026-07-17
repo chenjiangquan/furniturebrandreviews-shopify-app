@@ -576,6 +576,14 @@ function ProductReviewPreview({ settings }: { settings: WidgetSettings }) {
   ];
 
   if (settings.layoutType === "sidebar") {
+    const sidebarReviewCount = 31;
+    const sidebarBreakdown = [
+      { rating: 5, count: 29 },
+      { rating: 4, count: 2 },
+      { rating: 3, count: 0 },
+      { rating: 2, count: 0 },
+      { rating: 1, count: 0 }
+    ];
     return (
       <div style={{ position: "sticky", top: 16, alignSelf: "start", minWidth: 0, overflow: "hidden", width: "100%" }}>
         <Card>
@@ -596,47 +604,51 @@ function ProductReviewPreview({ settings }: { settings: WidgetSettings }) {
                   borderRadius: settings.widgetBorderRadius,
                   color: settings.textColor,
                   display: "grid",
-                  gap: 42,
-                  gridTemplateColumns: "minmax(240px, 290px) minmax(440px, 1fr)",
-                  minWidth: 760,
+                  gap: 56,
+                  gridTemplateColumns: "minmax(250px, 310px) minmax(520px, 1fr)",
+                  minWidth: 860,
                   padding: 22,
                   width: "100%"
                 }}
               >
                 <aside>
                   <BlockStack gap="400">
-                    <BlockStack gap="150">
-                      <Text as="h2" variant="headingLg">Customer Reviews</Text>
-                      <InlineStack gap="200" blockAlign="baseline">
-                        <Text as="p" variant="headingXl">4.7</Text>
-                        <Text as="p" tone="subdued">238 reviews</Text>
-                      </InlineStack>
-                    </BlockStack>
-
-                    {settings.showPhotoSummary && previewPhotos.length ? (
-                      <div style={{ display: "grid", gap: 6, gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
-                        {previewPhotos.slice(0, 3).map((review) => (
-                          <img key={review.imageUrl} src={review.imageUrl} alt="" style={{ aspectRatio: "1", borderRadius: 8, objectFit: "cover", width: "100%" }} />
-                        ))}
-                      </div>
-                    ) : null}
+                    <Text as="h2" variant="headingLg">Customer Reviews</Text>
 
                     <BlockStack gap="200">
                       {settings.showWriteReviewButton ? <PreviewButton settings={settings} fullWidth>Write a review</PreviewButton> : null}
-                      {settings.showAskQuestionButton ? <PreviewButton settings={settings} fullWidth secondary onClick={() => setActiveTab("questions")}>Ask a question</PreviewButton> : null}
+                      {settings.showAskQuestionButton ? <PreviewButton settings={settings} fullWidth onClick={() => setActiveTab("questions")}>Ask a question</PreviewButton> : null}
+                    </BlockStack>
+
+                    <BlockStack gap="200">
+                      {settings.showAverageRating ? (
+                        <InlineStack gap="200" blockAlign="baseline" wrap={false}>
+                          <span style={{ color: settings.textColor, fontSize: 25, fontWeight: 700, lineHeight: 1 }}>4.9</span>
+                          <Text as="p" tone="subdued">out of 5</Text>
+                        </InlineStack>
+                      ) : null}
+                      {settings.showAverageRating ? (
+                        <span style={{ alignSelf: "flex-start", background: settings.ratingBadgeBackgroundColor, borderRadius: settings.ratingBadgeBorderRadius, display: "inline-flex", padding: settings.ratingBadgePadding, width: "fit-content" }}>
+                          <StarRating rating={4.9} settings={settings} />
+                        </span>
+                      ) : null}
+                      {settings.showReviewCount ? <Text as="p" tone="subdued">{sidebarReviewCount} total reviews</Text> : null}
                     </BlockStack>
 
                     {settings.showRatingBreakdown ? (
                       <BlockStack gap="200">
-                        {breakdown.map((item) => {
-                          const percent = Math.round((item.count / totalBreakdown) * 100);
+                        {sidebarBreakdown.map((item) => {
+                          const percent = Math.round((item.count / sidebarReviewCount) * 100);
                           return (
-                            <div key={item.rating} style={{ alignItems: "center", display: "grid", gap: 8, gridTemplateColumns: "78px 1fr 30px" }}>
-                              <span style={{ color: settings.starColor, fontSize: 12, whiteSpace: "nowrap" }}>{"★★★★★".slice(0, item.rating)}{"☆☆☆☆☆".slice(0, 5 - item.rating)}</span>
-                              <span style={{ background: "#eef0f2", height: 3, overflow: "hidden" }}>
+                            <div key={item.rating} style={{ alignItems: "center", display: "grid", gap: 9, gridTemplateColumns: "78px 1fr 34px" }}>
+                              <label style={{ alignItems: "center", display: "inline-flex", fontSize: 13, fontWeight: 650, gap: 8, whiteSpace: "nowrap" }}>
+                                <input type="checkbox" checked={reviewFilter === `${item.rating}_star`} onChange={(event) => setReviewFilter(event.currentTarget.checked ? `${item.rating}_star` : "most_recent")} />
+                                <span>{item.rating}-star</span>
+                              </label>
+                              <span style={{ background: "#eef0f2", borderRadius: 999, height: 8, overflow: "hidden" }}>
                                 <span style={{ background: settings.ratingBarColor, display: "block", height: "100%", width: `${percent}%` }} />
                               </span>
-                              <span style={{ color: settings.lighterTextColor, textAlign: "right" }}>{item.count}</span>
+                              <span style={{ color: settings.textColor, fontSize: 13, fontWeight: 650, textAlign: "right" }}>{percent}%</span>
                             </div>
                           );
                         })}
@@ -646,15 +658,28 @@ function ProductReviewPreview({ settings }: { settings: WidgetSettings }) {
                     {settings.showAiSummary ? (
                       <div style={{ ...reviewCardStyle, background: "#f7faf9" }}>
                         <BlockStack gap="200">
-                          <Text as="h3" variant="headingSm">Customers say</Text>
-                          <Text as="p">Customers praise the quality, accurate product photos, careful delivery and helpful support.</Text>
+                          <Text as="h3" variant="headingMd">AI review summary</Text>
+                          <Text as="p" tone="subdued">Customers frequently highlight product quality, sturdy materials, clear delivery updates, and helpful support before and after purchase. Recent reviews suggest shoppers value accurate product details, responsive communication, and furniture that arrives looking consistent with the photos and samples.</Text>
                           <Text as="p" tone="subdued">*AI-powered review summary based on recent customer reviews</Text>
-                          {settings.showReviewHighlights ? (
-                            <InlineStack gap="150">
-                              {["Quality", "Delivery", "Service"].map((label) => <Badge key={label}>{label}</Badge>)}
-                            </InlineStack>
-                          ) : null}
                         </BlockStack>
+                      </div>
+                    ) : null}
+
+                    {settings.showReviewHighlights ? (
+                      <InlineStack gap="150">
+                        {["Quality materials", "Helpful service", "Careful delivery"].map((label) => (
+                          <span key={label} style={{ background: "#e8f5f1", borderRadius: 999, color: "#0c6b58", fontSize: 12, fontWeight: 650, padding: "5px 8px" }}>{label}</span>
+                        ))}
+                      </InlineStack>
+                    ) : null}
+
+                    {settings.showPhotoSummary && previewPhotos.length ? (
+                      <div style={{ display: "grid", gap: 7, gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
+                        {previewPhotos.slice(0, 5).map((review) => (
+                          <button key={review.imageUrl} type="button" onClick={() => setPreviewImage(review.imageUrl)} style={{ background: "transparent", border: 0, cursor: "pointer", padding: 0 }}>
+                            <img src={review.imageUrl} alt="" style={{ aspectRatio: "1", borderRadius: 7, objectFit: "cover", width: "100%" }} />
+                          </button>
+                        ))}
                       </div>
                     ) : null}
                   </BlockStack>
@@ -663,10 +688,10 @@ function ProductReviewPreview({ settings }: { settings: WidgetSettings }) {
                 <main style={{ minWidth: 0 }}>
                   <div style={{ alignItems: "center", borderBottom: `1px solid ${settings.borderColor}`, display: "flex", justifyContent: "space-between" }}>
                     <div style={{ display: "flex", gap: 22 }}>
-                      <PreviewTab active={activeTab === "reviews"} settings={settings} onClick={() => setActiveTab("reviews")}>Reviews (238)</PreviewTab>
-                      <PreviewTab active={activeTab === "questions"} settings={settings} onClick={() => setActiveTab("questions")}>Questions ({previewQuestions.length})</PreviewTab>
+                      <PreviewTab active={activeTab === "reviews"} settings={settings} onClick={() => setActiveTab("reviews")}>Reviews ({sidebarReviewCount})</PreviewTab>
+                      <PreviewTab active={activeTab === "questions"} settings={settings} onClick={() => setActiveTab("questions")}>Questions (0)</PreviewTab>
                     </div>
-                    <select aria-label="Sort reviews" value={reviewFilter} onChange={(event) => setReviewFilter(event.currentTarget.value)} style={{ border: `1px solid ${settings.textColor}`, borderRadius: 6, height: 40, marginBottom: 8, padding: "0 28px 0 10px" }}>
+                    <select aria-label="Sort reviews" value={reviewFilter} onChange={(event) => setReviewFilter(event.currentTarget.value)} style={{ appearance: "none", backgroundColor: "#fff", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='m3 4.5 3 3 3-3' fill='none' stroke='%23202223' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundPosition: "right 10px center", backgroundRepeat: "no-repeat", border: `1px solid ${settings.textColor}`, borderRadius: 6, height: 40, marginBottom: 8, padding: "0 30px 0 12px" }}>
                       {reviewSortOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                   </div>
@@ -676,14 +701,19 @@ function ProductReviewPreview({ settings }: { settings: WidgetSettings }) {
                       {previewReviews.map((review) => (
                         <article key={review.title} style={{ borderBottom: `1px solid ${settings.borderColor}`, padding: "26px 0" }}>
                           <BlockStack gap="200">
-                            <StarRating rating={review.rating} settings={settings} />
                             <InlineStack gap="200" blockAlign="center">
                               {settings.showReviewerPhotos ? <InitialsAvatar name={review.name} settings={settings} /> : null}
-                              <Text as="p" variant="headingSm">{review.name}{settings.hideReviewDate ? "" : ` · ${review.date}`}</Text>
+                              <Text as="p" tone="subdued">{review.name}{settings.hideReviewDate ? "" : ` · ${review.date}`}</Text>
                             </InlineStack>
-                            <Text as="h3" variant="headingMd"><span style={{ color: settings.titleTextColor }}>{review.title}</span></Text>
-                            <Text as="p"><span style={{ color: settings.contentTextColor }}>{review.content}</span></Text>
-                            {review.imageUrl ? <img src={review.imageUrl} alt="" style={{ borderRadius: settings.borderRadius, height: 150, objectFit: "cover", width: 170 }} /> : null}
+                            <InlineStack gap="200" blockAlign="center">
+                              <StarRating rating={review.rating} settings={settings} />
+                              {settings.showVerifiedBadge && review.verified ? (
+                                <span style={{ background: "#e8f5f1", borderRadius: 999, color: "#0c6b58", fontSize: 12, padding: "3px 8px" }}>Verified purchase</span>
+                              ) : null}
+                            </InlineStack>
+                            <Text as="h3" variant="headingMd"><span style={{ color: settings.titleTextColor, fontSize: settings.titleFontSize }}>{review.title}</span></Text>
+                            <Text as="p"><span style={{ color: settings.contentTextColor, fontSize: settings.contentFontSize }}>{review.content}</span></Text>
+                            {review.imageUrl ? <img src={review.imageUrl} alt="" style={{ borderRadius: settings.borderRadius, height: 98, objectFit: "cover", width: 128 }} /> : null}
                             <InlineStack gap="200" blockAlign="center">
                               <Text as="span" tone="subdued">Helpful?</Text>
                               <Text as="span" tone="subdued">👍 3</Text>
@@ -695,11 +725,7 @@ function ProductReviewPreview({ settings }: { settings: WidgetSettings }) {
                     </div>
                   ) : (
                     <div style={{ padding: "26px 0" }}>
-                      <BlockStack gap="200">
-                        <Text as="h3" variant="headingMd">Customer questions</Text>
-                        <Text as="p"><strong>Q:</strong> {previewQuestions[0].question}</Text>
-                        <Text as="p" tone="subdued"><strong>A:</strong> {previewQuestions[0].answer}</Text>
-                      </BlockStack>
+                      <Text as="p" tone="subdued">No questions yet.</Text>
                     </div>
                   )}
                 </main>
