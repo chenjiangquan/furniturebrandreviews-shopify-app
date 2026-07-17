@@ -100,23 +100,29 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     questionEmailNotificationsEnabled: true
   };
   try {
-    if (session.accessToken) {
-      await syncShopContactFromShopify(shopDomain, session.accessToken);
-    }
     const [, loadedWidgetSettings, loadedGoogleSeoSettings, loadedShop] = await Promise.all([
       getProductReviewWidgetSettings(shopDomain),
       prisma.widgetSettings.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } }),
       prisma.googleSeoSettings.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } }),
       prisma.shop.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } })
     ]);
+    const shouldSyncShopContact = Boolean(
+      session.accessToken &&
+      !loadedShop.storeEmail &&
+      !loadedShop.contactEmail &&
+      !loadedShop.shopOwnerEmail
+    );
+    const resolvedShop = shouldSyncShopContact
+      ? await syncShopContactFromShopify(shopDomain, session.accessToken as string) || loadedShop
+      : loadedShop;
     widgetSettings = loadedWidgetSettings;
     googleSeoSettings = loadedGoogleSeoSettings;
     shop = {
-      notificationEmail: loadedShop.notificationEmail || "",
-      storeEmail: loadedShop.storeEmail || "",
-      contactEmail: loadedShop.contactEmail || "",
-      reviewEmailNotificationsEnabled: loadedShop.reviewEmailNotificationsEnabled,
-      questionEmailNotificationsEnabled: loadedShop.questionEmailNotificationsEnabled
+      notificationEmail: resolvedShop.notificationEmail || "",
+      storeEmail: resolvedShop.storeEmail || "",
+      contactEmail: resolvedShop.contactEmail || "",
+      reviewEmailNotificationsEnabled: resolvedShop.reviewEmailNotificationsEnabled,
+      questionEmailNotificationsEnabled: resolvedShop.questionEmailNotificationsEnabled
     };
   } catch (error) {
     console.error("Widgets Settings loader failed; rendering fallback UI", error);

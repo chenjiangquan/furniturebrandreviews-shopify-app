@@ -125,6 +125,141 @@
     }
   }
 
+  function normalizeSeoText(value) {
+    return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+  }
+
+  function productSchemaNodes(value, nodes = []) {
+    if (!value || typeof value !== "object") return nodes;
+    if (Array.isArray(value)) {
+      value.forEach((item) => productSchemaNodes(item, nodes));
+      return nodes;
+    }
+    const rawType = value["@type"];
+    const types = Array.isArray(rawType) ? rawType : [rawType];
+    if (types.some((type) => String(type || "").toLowerCase() === "product")) {
+      nodes.push(value);
+    }
+    Object.values(value).forEach((item) => productSchemaNodes(item, nodes));
+    return nodes;
+  }
+
+  function canonicalProductUrl() {
+    const canonical = document.querySelector('link[rel="canonical"]');
+    return canonical && canonical.href
+      ? canonical.href
+      : `${window.location.origin}${window.location.pathname}`;
+  }
+
+  function restoreProductReviewSeo() {
+    document.querySelectorAll('script[type="application/ld+json"][data-fbr-review-seo]').forEach((script) => {
+      if (script.dataset.fbrReviewSeo === "generated") {
+        script.remove();
+        return;
+      }
+      if (typeof script.__fbrOriginalJson === "string") {
+        script.textContent = script.__fbrOriginalJson;
+        delete script.__fbrOriginalJson;
+      }
+      delete script.dataset.fbrReviewSeo;
+    });
+  }
+
+  function applyProductReviewSeo(el, data) {
+    if (!data || !data.seoRichSnippetsEnabled) {
+      restoreProductReviewSeo();
+      return;
+    }
+
+    const reviewCount = Math.max(0, Number(data.reviewCount) || 0);
+    const ratingValue = Number(data.averageRating) || 0;
+    const productName = String(el.dataset.productTitle || "").trim();
+    if (!reviewCount || ratingValue <= 0 || !productName) return;
+
+    const canonicalUrl = canonicalProductUrl();
+    const aggregateRating = {
+      "@type": "AggregateRating",
+      ratingValue,
+      reviewCount,
+      bestRating: 5,
+      worstRating: 1
+    };
+    const reviews = (Array.isArray(data.reviews) ? data.reviews : [])
+      .filter((review) => review && review.customerName && review.content && Number(review.rating) > 0)
+      .slice(0, 5)
+      .map((review) => ({
+        "@type": "Review",
+        name: String(review.title || `Review of ${productName}`),
+        reviewBody: String(review.content),
+        datePublished: review.createdAt ? String(review.createdAt).slice(0, 10) : undefined,
+        reviewRating: {
+          "@type": "Rating",
+          ratingValue: Number(review.rating),
+          bestRating: 5,
+          worstRating: 1
+        },
+        author: {
+          "@type": "Person",
+          name: String(review.customerName)
+        }
+      }));
+
+    const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
+    let bestMatch = null;
+    let totalProductNodes = 0;
+    for (const script of scripts) {
+      let parsed;
+      try {
+        parsed = JSON.parse(script.textContent || "");
+      } catch {
+        continue;
+      }
+      const nodes = productSchemaNodes(parsed);
+      totalProductNodes += nodes.length;
+      for (const node of nodes) {
+        const schemaUrl = typeof node.url === "string" ? node.url : "";
+        const schemaId = typeof node["@id"] === "string" ? node["@id"] : "";
+        const nameMatches = normalizeSeoText(node.name) === normalizeSeoText(productName);
+        const urlMatches = Boolean(
+          (schemaUrl && canonicalUrl && schemaUrl.split("#")[0] === canonicalUrl.split("#")[0]) ||
+          (schemaId && canonicalUrl && schemaId.includes(canonicalUrl.split("#")[0]))
+        );
+        const score = (urlMatches ? 2 : 0) + (nameMatches ? 1 : 0);
+        if (!bestMatch || score > bestMatch.score) {
+          bestMatch = { script, node, parsed, score };
+        }
+      }
+    }
+
+    if (bestMatch && (bestMatch.score > 0 || totalProductNodes === 1)) {
+      if (typeof bestMatch.script.__fbrOriginalJson !== "string") {
+        bestMatch.script.__fbrOriginalJson = bestMatch.script.textContent || "";
+      }
+      bestMatch.node.aggregateRating = aggregateRating;
+      if (reviews.length) bestMatch.node.review = reviews;
+      bestMatch.script.textContent = JSON.stringify(bestMatch.parsed);
+      bestMatch.script.dataset.fbrReviewSeo = "patched";
+      return;
+    }
+
+    let generated = document.querySelector('script[data-fbr-review-seo="generated"]');
+    if (!generated) {
+      generated = document.createElement("script");
+      generated.type = "application/ld+json";
+      generated.dataset.fbrReviewSeo = "generated";
+      document.head.appendChild(generated);
+    }
+    generated.textContent = JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "Product",
+      "@id": `${canonicalUrl}#fbr-product`,
+      name: productName,
+      url: canonicalUrl,
+      aggregateRating,
+      ...(reviews.length ? { review: reviews } : {})
+    });
+  }
+
   function settingsFromReviewData(data, fallbackSettings) {
     const settings = {
       ...defaultProductSettings,
@@ -1143,6 +1278,7 @@
         const data = await fetchJson(url);
         writePersistentCache(url, data);
         renderProductStars(el, data);
+        applyProductReviewSeo(el, data);
       } catch (error) {
         console.error("[fbr] Product Star Rating failed", error);
         if (!renderedFromCache) {
@@ -1166,6 +1302,7 @@
         writePersistentCache(url, data);
         const settings = data.widgetSettings || await fetchJson(`${apiBase(el)}/api/product-review-widget-settings?shop=${encodeURIComponent(shop(el))}`).catch(() => defaultProductSettings);
         renderProductReviews(el, data, settingsFromReviewData(data, settings));
+        applyProductReviewSeo(el, data);
       } catch (error) {
         console.error("[fbr] Product Reviews Widget failed", error);
         if (!renderedFromCache) {

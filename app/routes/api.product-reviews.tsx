@@ -21,12 +21,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     throw new Response("productId, productHandle, or productTitle is required.", { status: 400 });
   }
   if (url.searchParams.get("summaryOnly") === "1") {
-    const [summary, settings] = await Promise.all([
+    const [summary, settings, googleSeoSettings] = await Promise.all([
       getProductReviewRatingSummary(shop, productId, productHandle, productTitle),
-      getProductReviewWidgetSettings(shop)
+      getProductReviewWidgetSettings(shop),
+      prisma.googleSeoSettings.findUnique({
+        where: { shopDomain: shop },
+        select: { seoRichSnippetsEnabled: true }
+      })
     ]);
     return corsJson({
       ...summary,
+      seoRichSnippetsEnabled: googleSeoSettings?.seoRichSnippetsEnabled || false,
       starRatingBadgeSettings: {
         starColor: settings.starRatingBadgeStarColor,
         textColor: settings.starRatingBadgeTextColor,
@@ -41,12 +46,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     });
   }
-  const [summary, settings] = await Promise.all([
+  const [summary, settings, googleSeoSettings] = await Promise.all([
     getProductReviewSummary(shop, productId, productHandle, productTitle),
-    getProductReviewWidgetSettings(shop)
+    getProductReviewWidgetSettings(shop),
+    prisma.googleSeoSettings.findUnique({
+      where: { shopDomain: shop },
+      select: { seoRichSnippetsEnabled: true }
+    })
   ]);
   const { id, shopDomain, createdAt, updatedAt, ...widgetSettings } = settings;
-  return corsJson({ ...summary, widgetSettings }, {
+  return corsJson({
+    ...summary,
+    seoRichSnippetsEnabled: googleSeoSettings?.seoRichSnippetsEnabled || false,
+    widgetSettings
+  }, {
     headers: {
       "Cache-Control": "public, max-age=30, stale-while-revalidate=300"
     }

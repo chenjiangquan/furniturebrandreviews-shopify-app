@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { useFetcher, useLoaderData } from "@remix-run/react";
+import { useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
 import * as React from "react";
 import {
   Badge,
@@ -48,6 +48,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function GoogleSeoSettings() {
   const { settings } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
+  const navigate = useNavigate();
   const [draft, setDraft] = React.useState({
     seoRichSnippetsEnabled: settings.seoRichSnippetsEnabled,
     googleShoppingEnabled: settings.googleShoppingEnabled,
@@ -64,7 +65,7 @@ export default function GoogleSeoSettings() {
       fullWidth
       title="Google and SEO"
       subtitle="Manage review visibility settings for search, rich snippets, and review feeds."
-      backAction={{ content: "Widgets Settings", url: "/app/widgets-settings" }}
+      backAction={{ content: "Widgets Settings", onAction: () => navigate("/app/widgets-settings") }}
     >
       <fetcher.Form method="post">
         <input type="hidden" name="seoRichSnippetsEnabled" value={draft.seoRichSnippetsEnabled ? "on" : ""} />
@@ -72,7 +73,7 @@ export default function GoogleSeoSettings() {
         <input type="hidden" name="reviewsSiteEnabled" value={draft.reviewsSiteEnabled ? "on" : ""} />
         <BlockStack gap="500">
           <InlineStack align="space-between" blockAlign="center" gap="300">
-            <Button url="/app/widgets-settings">Back to Widgets Settings</Button>
+            <Button onClick={() => navigate("/app/widgets-settings")}>Back to Widgets Settings</Button>
             {fetcher.data?.ok ? <Badge tone="success">Saved</Badge> : null}
           </InlineStack>
 
@@ -90,7 +91,7 @@ export default function GoogleSeoSettings() {
             <Text as="h2" variant="headingLg">Google and SEO</Text>
             <SettingRow
               title="SEO Rich Snippets"
-              description="Show your reviews in Google Search results when people search for your products."
+              description="Add published review ratings to Product structured data when the Product Reviews Widget or Product Star Rating is installed."
               checked={draft.seoRichSnippetsEnabled}
               onChange={(value) => setValue("seoRichSnippetsEnabled", value)}
             />
