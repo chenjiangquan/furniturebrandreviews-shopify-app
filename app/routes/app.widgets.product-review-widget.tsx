@@ -87,6 +87,7 @@ const textFields = [
   "avatarTextColor",
   "buttonBackgroundColor",
   "buttonTextColor",
+  "buttonBorderColor",
   "textColor",
   "lighterTextColor",
   "titleTextColor",
@@ -264,8 +265,7 @@ export default function ProductReviewWidgetSettings() {
                 <RangeSlider label="Button border radius" min={0} max={24} value={draft.buttonBorderRadius} onChange={(value) => setValue("buttonBorderRadius", sliderNumber(value))} output />
                 <ColorField label="Button background color" value={draft.buttonBackgroundColor} onChange={(value) => setValue("buttonBackgroundColor", value)} />
                 <ColorField label="Button text color" value={draft.buttonTextColor} onChange={(value) => setValue("buttonTextColor", value)} />
-                <ColorField label="Border color" value={draft.borderColor} onChange={(value) => setValue("borderColor", value)} />
-                <ColorField label="Card background color" value={draft.cardBackgroundColor} onChange={(value) => setValue("cardBackgroundColor", value)} />
+                <ColorField label="Button border color" value={draft.buttonBorderColor} onChange={(value) => setValue("buttonBorderColor", value)} />
                 <Divider />
                 <Text as="h3" variant="headingSm">Widget container settings</Text>
                 <ColorField label="Widget background color" value={draft.widgetBackgroundColor} onChange={(value) => setValue("widgetBackgroundColor", value)} />
@@ -277,19 +277,24 @@ export default function ProductReviewWidgetSettings() {
                 <ColorField label="Avatar background color" value={draft.avatarBackgroundColor} onChange={(value) => setValue("avatarBackgroundColor", value)} />
                 <ColorField label="Avatar text color" value={draft.avatarTextColor} onChange={(value) => setValue("avatarTextColor", value)} />
                 <RangeSlider label="Avatar size" min={22} max={44} value={draft.avatarSize} onChange={(value) => setValue("avatarSize", sliderNumber(value))} output />
+                <ColorField label="Card background color" value={draft.cardBackgroundColor} onChange={(value) => setValue("cardBackgroundColor", value)} />
                 <RangeSlider label="Review card border radius" min={0} max={24} value={draft.borderRadius} onChange={(value) => setValue("borderRadius", sliderNumber(value))} output />
                 <RangeSlider label="Review card border size" min={0} max={4} step={1} value={draft.reviewCardBorderWidth} onChange={(value) => setValue("reviewCardBorderWidth", sliderNumber(value))} output />
                 <RangeSlider label="Review card spacing" min={8} max={32} value={draft.reviewCardSpacing} onChange={(value) => setValue("reviewCardSpacing", sliderNumber(value))} output />
+                <Divider />
+                <Text as="h3" variant="headingSm">Typography and content colors</Text>
+                <ColorField label="Text color" value={draft.textColor} onChange={(value) => setValue("textColor", value)} />
+                <ColorField label="Lighter text color" value={draft.lighterTextColor} onChange={(value) => setValue("lighterTextColor", value)} />
+                <ColorField label="Title text color" value={draft.titleTextColor} onChange={(value) => setValue("titleTextColor", value)} />
+                <ColorField label="Content text color" value={draft.contentTextColor} onChange={(value) => setValue("contentTextColor", value)} />
+                <RangeSlider label="Title font size" min={12} max={28} suffix="px" value={draft.titleFontSize} onChange={(value) => setValue("titleFontSize", sliderNumber(value))} output />
+                <RangeSlider label="Content font size" min={12} max={22} suffix="px" value={draft.contentFontSize} onChange={(value) => setValue("contentFontSize", sliderNumber(value))} output />
               </BlockStack>
             </Card>
 
             <Card>
               <BlockStack gap="300">
                 <Text as="h2" variant="headingMd">Widget Content Settings</Text>
-                <Toggle label="Show average rating" checked={draft.showAverageRating} onChange={(value) => setValue("showAverageRating", value)} />
-                <Toggle label="Show review count" checked={draft.showReviewCount} onChange={(value) => setValue("showReviewCount", value)} />
-                <Toggle label="Show rating breakdown" checked={draft.showRatingBreakdown} onChange={(value) => setValue("showRatingBreakdown", value)} />
-                <Toggle label="Show Write a Review button" checked={draft.showWriteReviewButton} onChange={(value) => setValue("showWriteReviewButton", value)} />
                 <Toggle label="Show Ask a Question button" checked={draft.showAskQuestionButton} onChange={(value) => setValue("showAskQuestionButton", value)} />
                 <Toggle label="Show AI review summary" checked={draft.showAiSummary} onChange={(value) => setValue("showAiSummary", value)} />
                 <Toggle label="Show review highlights" checked={draft.showReviewHighlights} onChange={(value) => setValue("showReviewHighlights", value)} />
@@ -300,14 +305,6 @@ export default function ProductReviewWidgetSettings() {
                 <Divider />
                 <Toggle label="Show verified badge" checked={draft.showVerifiedBadge} onChange={(value) => setValue("showVerifiedBadge", value)} />
                 <Toggle label="Hide review date" checked={draft.hideReviewDate} onChange={(value) => setValue("hideReviewDate", value)} />
-                <Divider />
-                <Text as="h3" variant="headingSm">Typography and content colors</Text>
-                <ColorField label="Text color" value={draft.textColor} onChange={(value) => setValue("textColor", value)} />
-                <ColorField label="Lighter text color" value={draft.lighterTextColor} onChange={(value) => setValue("lighterTextColor", value)} />
-                <ColorField label="Title text color" value={draft.titleTextColor} onChange={(value) => setValue("titleTextColor", value)} />
-                <ColorField label="Content text color" value={draft.contentTextColor} onChange={(value) => setValue("contentTextColor", value)} />
-                <RangeSlider label="Title font size" min={12} max={28} suffix="px" value={draft.titleFontSize} onChange={(value) => setValue("titleFontSize", sliderNumber(value))} output />
-                <RangeSlider label="Content font size" min={12} max={22} suffix="px" value={draft.contentFontSize} onChange={(value) => setValue("contentFontSize", sliderNumber(value))} output />
               </BlockStack>
             </Card>
 
@@ -400,7 +397,15 @@ function normalizeWidgetSettings(settings: WidgetSettings): WidgetSettings {
         : "standard";
 
   const sortDefault = settings.sortDefault === "lowest_rating" ? "pictures_first" : settings.sortDefault;
-  return { ...settings, layoutType, sortDefault };
+  return {
+    ...settings,
+    layoutType,
+    sortDefault,
+    showAverageRating: true,
+    showReviewCount: true,
+    showRatingBreakdown: true,
+    showWriteReviewButton: true
+  };
 }
 
 function HiddenSettings({ settings }: { settings: WidgetSettings }) {
@@ -573,7 +578,7 @@ function ProductReviewPreview({ settings }: { settings: WidgetSettings }) {
                 <Text as="h2" variant="headingLg">Customer Reviews</Text>
                 <InlineStack gap="200">
                   {settings.showWriteReviewButton ? <PreviewButton settings={settings}>Write a review</PreviewButton> : null}
-                  {settings.showAskQuestionButton ? <PreviewButton settings={settings} secondary onClick={() => setQuestionOpen(true)}>Ask a question</PreviewButton> : null}
+                  {settings.showAskQuestionButton ? <PreviewButton settings={settings} onClick={() => setQuestionOpen(true)}>Ask a question</PreviewButton> : null}
                 </InlineStack>
               </InlineStack>
 
@@ -664,20 +669,24 @@ function ProductReviewPreview({ settings }: { settings: WidgetSettings }) {
                     Questions ({previewQuestions.length})
                   </PreviewTab>
                 </div>
-                <div style={{ marginBottom: 8, width: 160 }}>
+                <div style={{ marginBottom: 8, width: 138 }}>
                   <select
                     aria-label="Sort reviews"
                     value={reviewFilter}
                     onChange={(event) => setReviewFilter(event.currentTarget.value)}
                     style={{
-                      background: "#fff",
-                      border: `1px solid ${settings.borderColor}`,
-                      borderRadius: settings.borderRadius,
+                      appearance: "none",
+                      backgroundColor: "#fff",
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='m3 4.5 3 3 3-3' fill='none' stroke='%23202223' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                      backgroundPosition: "right 9px center",
+                      backgroundRepeat: "no-repeat",
+                      border: `1px solid ${settings.textColor}`,
+                      borderRadius: 6,
                       color: settings.textColor,
                       font: "inherit",
                       fontWeight: 400,
                       height: 40,
-                      padding: "0 28px 0 12px",
+                      padding: "0 26px 0 8px",
                       textAlign: "center",
                       width: "100%"
                     }}
@@ -755,10 +764,7 @@ function ProductReviewPreview({ settings }: { settings: WidgetSettings }) {
                     ))
                   ) : (
                     <div style={{ ...reviewCardStyle, borderStyle: "dashed" }}>
-                      <BlockStack gap="200">
-                        <Text as="p" tone="subdued">No questions yet.</Text>
-                        {settings.showAskQuestionButton ? <PreviewButton settings={settings} onClick={() => setQuestionOpen(true)}>Ask a question</PreviewButton> : null}
-                      </BlockStack>
+                      <Text as="p" tone="subdued">No questions yet.</Text>
                     </div>
                   )}
                 </div>
@@ -1184,16 +1190,16 @@ function normalizeHex(value: string) {
   return "#000000";
 }
 
-function PreviewButton({ settings, secondary, children, onClick }: { settings: WidgetSettings; secondary?: boolean; children: React.ReactNode; onClick?: () => void }) {
+function PreviewButton({ settings, children, onClick }: { settings: WidgetSettings; children: React.ReactNode; onClick?: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
       style={{
-        border: secondary ? 0 : `1px solid ${settings.buttonBackgroundColor}`,
+        border: `1px solid ${settings.buttonBorderColor}`,
         borderRadius: settings.buttonBorderRadius,
-        background: secondary ? settings.cardBackgroundColor : settings.buttonBackgroundColor,
-        color: secondary ? settings.textColor : settings.buttonTextColor,
+        background: settings.buttonBackgroundColor,
+        color: settings.buttonTextColor,
         padding: "10px 14px",
         fontWeight: 600,
         outline: "none",

@@ -30,6 +30,7 @@
     avatarSize: 28,
     buttonBackgroundColor: "#1f6f64",
     buttonTextColor: "#ffffff",
+    buttonBorderColor: "#dfe3e8",
     textColor: "#202223",
     lighterTextColor: "#6d7175",
     titleTextColor: "#202223",
@@ -131,6 +132,10 @@
       ...((data && data.widgetSettings) || {})
     };
     if (settings.sortDefault === "lowest_rating") settings.sortDefault = "pictures_first";
+    settings.showAverageRating = true;
+    settings.showReviewCount = true;
+    settings.showRatingBreakdown = true;
+    settings.showWriteReviewButton = true;
     return settings;
   }
 
@@ -148,17 +153,18 @@
 
   function renderProductStars(el, data) {
     const computedStyles = window.getComputedStyle(el);
+    const badge = (data && data.starRatingBadgeSettings) || {};
     const settings = {
       ...defaultProductSettings,
-      starColor: computedStyles.getPropertyValue("--fbr-star").trim() || defaultProductSettings.starColor,
+      starColor: badge.starColor || computedStyles.getPropertyValue("--fbr-star").trim() || defaultProductSettings.starColor,
       starSize: 18,
       starGap: 2
     };
     el.innerHTML = `
-      <div class="fbr-row">
+      <div class="fbr-row fbr-product-star-rating-badge" style="color:${escapeHtml(badge.textColor || "#202223")};background:${escapeHtml(badge.backgroundColor || "#ffffff")};border:${Number(badge.borderWidth) || 0}px solid ${escapeHtml(badge.borderColor || "#dfe3e8")};border-radius:${Math.max(0, Number(badge.borderRadius) || 0)}px;">
         ${starSquares(data.averageRating, settings)}
         <strong>${data.averageRating || "0.0"}</strong>
-        <span class="fbr-muted">(${data.reviewCount || 0} reviews)</span>
+        <span>(${data.reviewCount || 0} reviews)</span>
       </div>
     `;
   }
@@ -303,6 +309,7 @@
     const buttonBorderRadius = Math.max(0, Math.min(24, Number(settings.buttonBorderRadius ?? defaultProductSettings.buttonBorderRadius)));
     el.style.setProperty("--fbr-review-card-border-width", `${reviewCardBorderWidth}px`);
     el.style.setProperty("--fbr-button-radius", `${buttonBorderRadius}px`);
+    el.style.setProperty("--fbr-button-border-color", settings.buttonBorderColor || defaultProductSettings.buttonBorderColor);
     const widgetBorderWidth = Math.max(0, Math.min(3, Number(settings.widgetBorderWidth ?? defaultProductSettings.widgetBorderWidth)));
     const widgetBorderRadius = Math.max(0, Number(settings.widgetBorderRadius ?? defaultProductSettings.widgetBorderRadius));
     el.style.setProperty("--fbr-widget-border-width", `${widgetBorderWidth}px`);
@@ -449,7 +456,6 @@
             `).join("") : `
               <div class="fbr-question-empty">
                 <p class="fbr-muted">No questions yet.</p>
-                ${settings.showAskQuestionButton ? `<button class="fbr-button" type="button" data-fbr-open-question-empty style="background:${escapeAttr(settings.buttonBackgroundColor)}; color:${escapeAttr(settings.buttonTextColor)};">Ask a question</button>` : ""}
               </div>
             `}
           </div>
@@ -594,7 +600,7 @@
 
   function bindInlineQuestionModal(el, settings) {
     const modal = el.querySelector("[data-fbr-question-modal]");
-    const openButtons = el.querySelectorAll("[data-fbr-open-question], [data-fbr-open-question-empty]");
+    const openButtons = el.querySelectorAll("[data-fbr-open-question]");
     if (!modal || !openButtons.length) return;
     const close = () => {
       modal.classList.remove("fbr-modal-backdrop-active");
@@ -658,7 +664,7 @@
   function bindWidgetTabs(el) {
     const tabs = Array.from(el.querySelectorAll("[data-fbr-tab]"));
     const panels = Array.from(el.querySelectorAll("[data-fbr-tab-panel]"));
-    const askButtons = Array.from(el.querySelectorAll("[data-fbr-open-question], [data-fbr-open-question-empty]"));
+    const askButtons = Array.from(el.querySelectorAll("[data-fbr-open-question]"));
     tabs.forEach((tab) => {
       tab.addEventListener("click", () => {
         const selected = tab.dataset.fbrTab || "reviews";
