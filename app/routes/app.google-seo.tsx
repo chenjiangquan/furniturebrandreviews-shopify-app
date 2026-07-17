@@ -19,14 +19,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const [entitlements, settings] = await Promise.all([
     getShopEntitlements(session.shop),
-    prisma.googleSeoSettings.upsert({
-      where: { shopDomain: session.shop },
-      update: {},
-      create: { shopDomain: session.shop }
-    })
+    prisma.googleSeoSettings.findUnique({ where: { shopDomain: session.shop } })
   ]);
 
-  return { settings, entitlements };
+  return {
+    settings: settings || {
+      reviewsSiteEnabled: false,
+      seoRichSnippetsEnabled: false,
+      googleShoppingEnabled: false
+    },
+    entitlements
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {

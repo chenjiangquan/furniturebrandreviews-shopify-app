@@ -24,6 +24,9 @@ export async function ensureShop(shopDomain: string) {
 }
 
 export async function getProductReviewWidgetSettings(shopDomain: string) {
+  const existingSettings = await prisma.productReviewSettings.findUnique({ where: { shopDomain } });
+  if (existingSettings) return existingSettings;
+
   await ensureShop(shopDomain);
   const supportedProductReviewSettingsData = Object.fromEntries(
     Object.entries(defaultProductReviewWidgetSettings).filter(([field]) => productReviewSettingsFieldNames.has(field))
