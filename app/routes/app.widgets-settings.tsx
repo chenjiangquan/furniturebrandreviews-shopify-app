@@ -378,15 +378,23 @@ export default function WidgetsSettings() {
                         />
                         <Checkbox
                           label="Email me when a new review is submitted"
-                          name="reviewEmailNotificationsEnabled"
                           checked={reviewEmailNotificationsEnabled}
                           onChange={setReviewEmailNotificationsEnabled}
                         />
+                        <input
+                          type="hidden"
+                          name="reviewEmailNotificationsEnabled"
+                          value={reviewEmailNotificationsEnabled ? "true" : "false"}
+                        />
                         <Checkbox
                           label="Email me when a new question is submitted"
-                          name="questionEmailNotificationsEnabled"
                           checked={questionEmailNotificationsEnabled}
                           onChange={setQuestionEmailNotificationsEnabled}
+                        />
+                        <input
+                          type="hidden"
+                          name="questionEmailNotificationsEnabled"
+                          value={questionEmailNotificationsEnabled ? "true" : "false"}
                         />
                         <InlineStack gap="300" wrap>
                           <Button submit loading={notificationFetcher.state !== "idle"}>Save notification settings</Button>
