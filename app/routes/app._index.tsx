@@ -409,8 +409,6 @@ type PlanCellValue = boolean | string;
 
 const planRows: ReadonlyArray<readonly [string, PlanCellValue, PlanCellValue]> = [
   ["Product reviews", true, true],
-  ["Unlimited Review", "50 reviews/month", true],
-  ["Delete Review", "5 reviews/month", true],
   ["Review widget", true, true],
   ["Star rating badge", true, true],
   ["Brand trust widgets", true, true],
@@ -420,7 +418,9 @@ const planRows: ReadonlyArray<readonly [string, PlanCellValue, PlanCellValue]> =
   ["Google and SEO", false, true],
   ["AI review summary", false, true],
   ["Carousel layout", false, true],
-  ["Priority support", false, true]
+  ["Priority support", false, true],
+  ["Unlimited Review", "50 reviews/month", true],
+  ["Delete Review", "5 reviews/month", true]
 ];
 
 function PlanComparisonTable({ currentPlan }: { currentPlan: "FREE" | "PRO" }) {

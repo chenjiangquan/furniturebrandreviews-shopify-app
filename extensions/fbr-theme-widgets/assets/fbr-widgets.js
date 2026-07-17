@@ -40,6 +40,8 @@
     borderColor: "#dfe3e8",
     cardBackgroundColor: "#ffffff",
     borderRadius: 8,
+    reviewCardBorderWidth: 1,
+    buttonBorderRadius: 8,
     widgetBackgroundColor: "#ffffff",
     widgetBorderRadius: 8,
     widgetBorderWidth: 0,
@@ -123,11 +125,13 @@
   }
 
   function settingsFromReviewData(data, fallbackSettings) {
-    return {
+    const settings = {
       ...defaultProductSettings,
       ...(fallbackSettings || {}),
       ...((data && data.widgetSettings) || {})
     };
+    if (settings.sortDefault === "lowest_rating") settings.sortDefault = "pictures_first";
+    return settings;
   }
 
   function removeLegacyFloatingBadges() {
@@ -295,6 +299,10 @@
     el.style.setProperty("--fbr-star", settings.starColor);
     el.style.setProperty("--fbr-primary", settings.buttonBackgroundColor);
     el.style.setProperty("--fbr-radius", `${settings.borderRadius}px`);
+    const reviewCardBorderWidth = Math.max(0, Math.min(4, Number(settings.reviewCardBorderWidth ?? defaultProductSettings.reviewCardBorderWidth)));
+    const buttonBorderRadius = Math.max(0, Math.min(24, Number(settings.buttonBorderRadius ?? defaultProductSettings.buttonBorderRadius)));
+    el.style.setProperty("--fbr-review-card-border-width", `${reviewCardBorderWidth}px`);
+    el.style.setProperty("--fbr-button-radius", `${buttonBorderRadius}px`);
     const widgetBorderWidth = Math.max(0, Math.min(3, Number(settings.widgetBorderWidth ?? defaultProductSettings.widgetBorderWidth)));
     const widgetBorderRadius = Math.max(0, Number(settings.widgetBorderRadius ?? defaultProductSettings.widgetBorderRadius));
     el.style.setProperty("--fbr-widget-border-width", `${widgetBorderWidth}px`);
@@ -311,7 +319,7 @@
             <h3>Customer Reviews</h3>
             <div class="fbr-review-actions">
               ${settings.showWriteReviewButton ? `<button class="fbr-button" type="button" data-fbr-open-review style="background:${escapeAttr(settings.buttonBackgroundColor)}; color:${escapeAttr(settings.buttonTextColor)};">Write a review</button>` : ""}
-              ${settings.showAskQuestionButton ? `<button class="fbr-button fbr-button-secondary" type="button" data-fbr-open-question style="background:${escapeAttr(settings.cardBackgroundColor)}; color:${escapeAttr(settings.textColor)}; border-color:${escapeAttr(settings.borderColor)};">Ask a question</button>` : ""}
+              ${settings.showAskQuestionButton ? `<button class="fbr-button fbr-button-secondary fbr-ask-question-button" type="button" data-fbr-open-question style="background:${escapeAttr(settings.cardBackgroundColor)}; color:${escapeAttr(settings.textColor)};">Ask a question</button>` : ""}
             </div>
           </div>
           <div class="fbr-review-summary-grid">
@@ -343,7 +351,7 @@
           </div>
           <div class="fbr-mobile-review-actions">
             ${settings.showWriteReviewButton ? `<button class="fbr-button" type="button" data-fbr-open-review style="background:${escapeAttr(settings.buttonBackgroundColor)}; color:${escapeAttr(settings.buttonTextColor)};">Write a review</button>` : ""}
-            ${settings.showAskQuestionButton ? `<button class="fbr-button fbr-button-secondary" type="button" data-fbr-open-question style="background:${escapeAttr(settings.cardBackgroundColor)}; color:${escapeAttr(settings.textColor)}; border-color:${escapeAttr(settings.borderColor)};">Ask a question</button>` : ""}
+            ${settings.showAskQuestionButton ? `<button class="fbr-button fbr-button-secondary fbr-ask-question-button" type="button" data-fbr-open-question style="background:${escapeAttr(settings.cardBackgroundColor)}; color:${escapeAttr(settings.textColor)};">Ask a question</button>` : ""}
           </div>
         </div>
         ${settings.showAiSummary && hasApprovedReviews ? `
@@ -465,9 +473,10 @@
 
   function renderReviewModal(el, settings) {
     const formRadius = Number(settings.borderRadius) || 6;
+    const buttonRadius = Math.max(0, Math.min(24, Number(settings.buttonBorderRadius ?? defaultProductSettings.buttonBorderRadius)));
     return `
       <div class="fbr-modal-backdrop" data-fbr-review-modal aria-hidden="true">
-        <div class="fbr-modal" role="dialog" aria-modal="true" aria-labelledby="fbr-review-modal-title" style="--fbr-form-radius:${formRadius}px; --fbr-button-radius:${formRadius}px;">
+        <div class="fbr-modal" role="dialog" aria-modal="true" aria-labelledby="fbr-review-modal-title" style="--fbr-form-radius:${formRadius}px; --fbr-button-radius:${buttonRadius}px;">
           <div class="fbr-modal-header">
             <h3 id="fbr-review-modal-title">Write a review</h3>
             <button class="fbr-modal-close" type="button" data-fbr-close-review aria-label="Close review form">×</button>
@@ -523,9 +532,10 @@
 
   function renderQuestionModal(el, settings) {
     const formRadius = Number(settings.borderRadius) || 6;
+    const buttonRadius = Math.max(0, Math.min(24, Number(settings.buttonBorderRadius ?? defaultProductSettings.buttonBorderRadius)));
     return `
       <div class="fbr-modal-backdrop" data-fbr-question-modal aria-hidden="true">
-        <div class="fbr-modal" role="dialog" aria-modal="true" aria-labelledby="fbr-question-modal-title" style="--fbr-form-radius:${formRadius}px; --fbr-button-radius:${formRadius}px;">
+        <div class="fbr-modal" role="dialog" aria-modal="true" aria-labelledby="fbr-question-modal-title" style="--fbr-form-radius:${formRadius}px; --fbr-button-radius:${buttonRadius}px;">
           <div class="fbr-modal-header">
             <h3 id="fbr-question-modal-title">Ask a question</h3>
             <button class="fbr-modal-close" type="button" data-fbr-close-question aria-label="Close question form">×</button>
@@ -915,6 +925,7 @@
   function sortDefaultToStorefrontFilter(sortDefault) {
     if (sortDefault === "highest_rating") return "highest_rating";
     if (sortDefault === "lowest_rating") return "lowest_rating";
+    if (sortDefault === "pictures_first") return "pictures_first";
     return "most_recent";
   }
 

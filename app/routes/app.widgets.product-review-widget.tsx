@@ -60,6 +60,8 @@ const booleanFields = [
 
 const numberFields = [
   "borderRadius",
+  "reviewCardBorderWidth",
+  "buttonBorderRadius",
   "widgetBorderRadius",
   "widgetBorderWidth",
   "reviewCardSpacing",
@@ -138,6 +140,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const submittedWidgetBorderRadius = Math.max(0, Math.min(32, numberFromForm(form, "widgetBorderRadius")));
   data.widgetBorderWidth = submittedWidgetBorderWidth;
   data.widgetBorderRadius = submittedWidgetBorderRadius;
+  data.reviewCardBorderWidth = Math.max(0, Math.min(4, numberFromForm(form, "reviewCardBorderWidth")));
+  data.buttonBorderRadius = Math.max(0, Math.min(24, numberFromForm(form, "buttonBorderRadius")));
   data.reviewsPerRow = Math.max(2, Math.min(4, Number(data.reviewsPerRow) || defaultProductReviewWidgetSettings.reviewsPerRow));
 
   try {
@@ -250,13 +254,14 @@ export default function ProductReviewWidgetSettings() {
                 <RangeSlider label="Star size" min={14} max={34} value={draft.starSize} onChange={(value) => setValue("starSize", sliderNumber(value))} output />
                 <RangeSlider label="Star gap" min={-4} max={8} value={draft.starGap} onChange={(value) => setValue("starGap", sliderNumber(value))} output />
                 <Divider />
-                <ColorField label="Rating bar color" value={draft.ratingBarColor} onChange={(value) => setValue("ratingBarColor", value)} />
-                <Divider />
                 <Text as="h3" variant="headingSm">Rating summary badge settings</Text>
                 <ColorField label="Rating badge background color" value={draft.ratingBadgeBackgroundColor} onChange={(value) => setValue("ratingBadgeBackgroundColor", value)} />
                 <RangeSlider label="Rating badge border radius" min={0} max={999} step={1} value={draft.ratingBadgeBorderRadius} onChange={(value) => setValue("ratingBadgeBorderRadius", sliderNumber(value))} output />
                 <RangeSlider label="Rating badge padding" min={4} max={24} value={draft.ratingBadgePadding} onChange={(value) => setValue("ratingBadgePadding", sliderNumber(value))} output />
                 <Divider />
+                <ColorField label="Rating bar color" value={draft.ratingBarColor} onChange={(value) => setValue("ratingBarColor", value)} />
+                <Divider />
+                <RangeSlider label="Button border radius" min={0} max={24} value={draft.buttonBorderRadius} onChange={(value) => setValue("buttonBorderRadius", sliderNumber(value))} output />
                 <ColorField label="Button background color" value={draft.buttonBackgroundColor} onChange={(value) => setValue("buttonBackgroundColor", value)} />
                 <ColorField label="Button text color" value={draft.buttonTextColor} onChange={(value) => setValue("buttonTextColor", value)} />
                 <ColorField label="Border color" value={draft.borderColor} onChange={(value) => setValue("borderColor", value)} />
@@ -268,11 +273,12 @@ export default function ProductReviewWidgetSettings() {
                 <RangeSlider label="Widget border radius" min={0} max={32} step={1} value={draft.widgetBorderRadius} onChange={(value) => setValue("widgetBorderRadius", sliderNumber(value))} output />
                 <Divider />
                 <Toggle label="Show reviewer initials avatar" checked={draft.showReviewerPhotos} onChange={(value) => setValue("showReviewerPhotos", value)} />
-                <Text as="h3" variant="headingSm">Reviewer avatar settings</Text>
+                <Text as="h3" variant="headingSm">Review card settings</Text>
                 <ColorField label="Avatar background color" value={draft.avatarBackgroundColor} onChange={(value) => setValue("avatarBackgroundColor", value)} />
                 <ColorField label="Avatar text color" value={draft.avatarTextColor} onChange={(value) => setValue("avatarTextColor", value)} />
                 <RangeSlider label="Avatar size" min={22} max={44} value={draft.avatarSize} onChange={(value) => setValue("avatarSize", sliderNumber(value))} output />
-                <RangeSlider label="Button border radius" min={0} max={24} value={draft.borderRadius} onChange={(value) => setValue("borderRadius", sliderNumber(value))} output />
+                <RangeSlider label="Review card border radius" min={0} max={24} value={draft.borderRadius} onChange={(value) => setValue("borderRadius", sliderNumber(value))} output />
+                <RangeSlider label="Review card border size" min={0} max={4} step={1} value={draft.reviewCardBorderWidth} onChange={(value) => setValue("reviewCardBorderWidth", sliderNumber(value))} output />
                 <RangeSlider label="Review card spacing" min={8} max={32} value={draft.reviewCardSpacing} onChange={(value) => setValue("reviewCardSpacing", sliderNumber(value))} output />
               </BlockStack>
             </Card>
@@ -356,7 +362,7 @@ export default function ProductReviewWidgetSettings() {
                   options={[
                     { label: "Newest", value: "newest" },
                     { label: "Highest rating", value: "highest_rating" },
-                    { label: "Lowest rating", value: "lowest_rating" }
+                    { label: "Pictures first", value: "pictures_first" }
                   ]}
                   value={draft.sortDefault}
                   onChange={(value) => setValue("sortDefault", value)}
@@ -393,7 +399,8 @@ function normalizeWidgetSettings(settings: WidgetSettings): WidgetSettings {
         ? "carousel"
         : "standard";
 
-  return { ...settings, layoutType };
+  const sortDefault = settings.sortDefault === "lowest_rating" ? "pictures_first" : settings.sortDefault;
+  return { ...settings, layoutType, sortDefault };
 }
 
 function HiddenSettings({ settings }: { settings: WidgetSettings }) {
@@ -456,7 +463,7 @@ function ProductReviewPreview({ settings }: { settings: WidgetSettings }) {
   const max = Math.max(...breakdown.map((item) => item.count));
   const totalBreakdown = Math.max(breakdown.reduce((total, item) => total + item.count, 0), 1);
   const reviewCardStyle = {
-    border: `1px solid ${settings.borderColor}`,
+    border: `${settings.reviewCardBorderWidth}px solid ${settings.borderColor}`,
     borderRadius: settings.borderRadius,
     background: settings.cardBackgroundColor,
     padding: settings.reviewCardSpacing,
@@ -582,6 +589,7 @@ function ProductReviewPreview({ settings }: { settings: WidgetSettings }) {
                   {settings.showAverageRating ? (
                     <span
                       style={{
+                        alignSelf: "flex-start",
                         display: "inline-flex",
                         width: "fit-content",
                         borderRadius: settings.ratingBadgeBorderRadius,
@@ -656,14 +664,26 @@ function ProductReviewPreview({ settings }: { settings: WidgetSettings }) {
                     Questions ({previewQuestions.length})
                   </PreviewTab>
                 </div>
-                <div style={{ marginBottom: 8, width: 220 }}>
-                  <Select
-                    label="Sort reviews"
-                    labelHidden
-                    options={reviewSortOptions}
+                <div style={{ marginBottom: 8, width: 160 }}>
+                  <select
+                    aria-label="Sort reviews"
                     value={reviewFilter}
-                    onChange={setReviewFilter}
-                  />
+                    onChange={(event) => setReviewFilter(event.currentTarget.value)}
+                    style={{
+                      background: "#fff",
+                      border: `1px solid ${settings.borderColor}`,
+                      borderRadius: settings.borderRadius,
+                      color: settings.textColor,
+                      font: "inherit",
+                      fontWeight: 400,
+                      height: 40,
+                      padding: "0 28px 0 12px",
+                      textAlign: "center",
+                      width: "100%"
+                    }}
+                  >
+                    {reviewSortOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
                 </div>
               </div>
 
@@ -679,7 +699,11 @@ function ProductReviewPreview({ settings }: { settings: WidgetSettings }) {
                           </InlineStack>
                           <InlineStack align="space-between">
                             <StarRating rating={review.rating} settings={settings} />
-                            {settings.showVerifiedBadge && review.verified ? <Badge tone="success">Verified</Badge> : null}
+                            {settings.showVerifiedBadge && review.verified ? (
+                              <span style={{ background: "#e8f5f1", borderRadius: 999, color: "#0c6b58", fontSize: 12, padding: "3px 8px" }}>
+                                Verified purchase
+                              </span>
+                            ) : null}
                           </InlineStack>
                           <Text as="h3" variant="headingSm">
                             <span style={{ color: settings.titleTextColor, fontSize: settings.titleFontSize }}>{review.title}</span>
@@ -1166,12 +1190,14 @@ function PreviewButton({ settings, secondary, children, onClick }: { settings: W
       type="button"
       onClick={onClick}
       style={{
-        border: `1px solid ${secondary ? settings.borderColor : settings.buttonBackgroundColor}`,
-        borderRadius: settings.borderRadius,
+        border: secondary ? 0 : `1px solid ${settings.buttonBackgroundColor}`,
+        borderRadius: settings.buttonBorderRadius,
         background: secondary ? settings.cardBackgroundColor : settings.buttonBackgroundColor,
         color: secondary ? settings.textColor : settings.buttonTextColor,
         padding: "10px 14px",
-        fontWeight: 600
+        fontWeight: 600,
+        outline: "none",
+        boxShadow: "none"
       }}
     >
       {children}

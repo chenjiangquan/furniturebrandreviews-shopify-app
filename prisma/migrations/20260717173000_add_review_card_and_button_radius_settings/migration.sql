@@ -1,0 +1,3 @@
+ALTER TABLE "ProductReviewSettings"
+ADD COLUMN "reviewCardBorderWidth" INTEGER NOT NULL DEFAULT 1,
+ADD COLUMN "buttonBorderRadius" INTEGER NOT NULL DEFAULT 8;

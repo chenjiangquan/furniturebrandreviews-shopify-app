@@ -28,6 +28,8 @@ export const defaultProductReviewWidgetSettings = {
   borderColor: "#dfe3e8",
   cardBackgroundColor: "#ffffff",
   borderRadius: 8,
+  reviewCardBorderWidth: 1,
+  buttonBorderRadius: 8,
   widgetBackgroundColor: "#ffffff",
   widgetBorderRadius: 8,
   widgetBorderWidth: 0,

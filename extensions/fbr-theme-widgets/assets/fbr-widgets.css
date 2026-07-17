@@ -150,6 +150,9 @@
   border: 0;
   display: inline-flex;
   gap: 8px;
+  justify-self: start;
+  max-width: 100%;
+  width: fit-content !important;
 }
 
 .fbr-muted {
@@ -254,7 +257,7 @@
 }
 
 .fbr-review-item {
-  border: 1px solid #e4e7ec;
+  border: var(--fbr-review-card-border-width, 1px) solid #e4e7ec;
   border-radius: var(--fbr-radius) !important;
   padding: 18px !important;
 }
@@ -539,6 +542,15 @@
   border: 1px solid #dcdfe4;
 }
 
+.fbr-ask-question-button,
+.fbr-ask-question-button:hover,
+.fbr-ask-question-button:focus,
+.fbr-ask-question-button:active {
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
 .fbr-button-highlight {
   box-shadow: 0 0 0 3px rgba(31, 111, 100, 0.16);
   transform: translateY(-1px);
@@ -568,6 +580,14 @@
 
 .fbr-form textarea {
   min-height: 160px;
+}
+
+.fbr-form input:not([type="hidden"]):not([type="file"]) {
+  box-sizing: border-box !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  padding-bottom: 10px !important;
+  padding-top: 10px !important;
 }
 
 .fbr-form-message-success {
@@ -691,8 +711,12 @@
   border: 1px solid #c9cccf;
   border-radius: var(--fbr-radius) !important;
   font: inherit;
-  min-width: 180px;
-  padding: 9px 34px 9px 10px;
+  font-weight: 400 !important;
+  height: 40px;
+  min-width: 160px;
+  padding: 0 34px 0 14px;
+  text-align: center;
+  text-align-last: center;
 }
 
 .fbr-visually-hidden {

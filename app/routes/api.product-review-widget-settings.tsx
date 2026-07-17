@@ -39,6 +39,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     borderColor: settings.borderColor,
     cardBackgroundColor: settings.cardBackgroundColor,
     borderRadius: settings.borderRadius,
+    reviewCardBorderWidth: settings.reviewCardBorderWidth,
+    buttonBorderRadius: settings.buttonBorderRadius,
     widgetBackgroundColor: settings.widgetBackgroundColor,
     widgetBorderRadius: settings.widgetBorderRadius,
     widgetBorderWidth: settings.widgetBorderWidth,
@@ -62,7 +64,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     carouselShowDots: settings.carouselShowDots,
     reviewsPerPage: settings.reviewsPerPage,
     reviewsPerRow: settings.reviewsPerRow,
-    sortDefault: settings.sortDefault
+    sortDefault: settings.sortDefault === "lowest_rating" ? "pictures_first" : settings.sortDefault
   }, {
     headers: {
       "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"

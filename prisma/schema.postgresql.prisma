@@ -207,6 +207,8 @@ model ProductReviewSettings {
   borderColor              String   @default("#dfe3e8")
   cardBackgroundColor      String   @default("#ffffff")
   borderRadius             Int      @default(8)
+  reviewCardBorderWidth    Int      @default(1)
+  buttonBorderRadius       Int      @default(8)
   widgetBackgroundColor    String   @default("#ffffff")
   widgetBorderRadius       Int      @default(8)
   widgetBorderWidth        Int      @default(0)

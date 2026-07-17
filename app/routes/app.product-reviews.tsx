@@ -26,9 +26,7 @@ import { authenticate } from "~/shopify.server";
 type QuestionStatus = "PENDING" | "PUBLISHED" | "REJECTED" | "ARCHIVED";
 
 const tabs = [
-  { id: "all", content: "All Reviews" },
-  { id: "product", content: "Product Reviews" },
-  { id: "store", content: "Store Reviews" }
+  { id: "all", content: "All Reviews" }
 ];
 
 const viewTabs = [
@@ -180,20 +178,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "questionDelete") {
     await prisma.productQuestion.delete({ where: { id } });
-  }
-
-  if (intent === "edit") {
-    await prisma.productReview.update({
-      where: { id },
-      data: {
-        customerName: requiredString(form.get("customerName"), "name"),
-        customerEmail: String(form.get("customerEmail") || ""),
-        rating: clampRating(form.get("rating")),
-        title: requiredString(form.get("title"), "title"),
-        content: requiredString(form.get("content"), "content"),
-        productTitle: String(form.get("productTitle") || "")
-      }
-    });
   }
 
   if (intent === "importCsv") {
@@ -388,7 +372,7 @@ export default function ProductReviews() {
           <Card>
             <BlockStack gap="300">
               <Text as="h2" variant="headingMd">Manual review</Text>
-              <ReviewFields intent="create" busy={busy} />
+              <ReviewFields busy={busy} />
             </BlockStack>
           </Card>
         ) : null}
@@ -432,7 +416,6 @@ export default function ProductReviews() {
 function ReviewRow({ review, busy }: { review: any; busy: boolean }) {
   const fetcher = useFetcher();
   const [replyOpen, setReplyOpen] = React.useState(false);
-  const [editOpen, setEditOpen] = React.useState(false);
   const [imagePreviewOpen, setImagePreviewOpen] = React.useState(false);
   const submitIntent = (intent: string) => {
     const formData = new FormData();
@@ -521,8 +504,6 @@ function ReviewRow({ review, busy }: { review: any; busy: boolean }) {
           <Button size="micro" onClick={() => setReplyOpen(true)}>{review.merchantReply ? "Edit reply" : "Reply"}</Button>
           <Button size="micro" tone="critical" disabled={busy} onClick={() => submitIntent("delete")}>Delete</Button>
         </InlineStack>
-        <Button size="micro" disclosure={editOpen ? "up" : "down"} onClick={() => setEditOpen((open) => !open)}>Edit</Button>
-        {editOpen ? <ReviewFields intent="edit" review={review} busy={busy} /> : null}
       </BlockStack>
     </div>
   );
@@ -810,41 +791,34 @@ function ReviewFilterPopover() {
   );
 }
 
-function ReviewFields({ intent, review, busy }: { intent: "create" | "edit"; review?: any; busy: boolean }) {
-  const [productId, setProductId] = React.useState(review?.productId || "");
-  const [productHandle, setProductHandle] = React.useState(review?.productHandle || "");
-  const [productTitle, setProductTitle] = React.useState(review?.productTitle || "");
-  const [customerName, setCustomerName] = React.useState(review?.customerName || "");
-  const [customerEmail, setCustomerEmail] = React.useState(review?.customerEmail || "");
-  const [rating, setRating] = React.useState(String(review?.rating || 5));
-  const [title, setTitle] = React.useState(review?.title || "");
-  const [content, setContent] = React.useState(review?.content || "");
-  const [imageUrl, setImageUrl] = React.useState(review?.imageUrl || "");
-  const [verifiedPurchase, setVerifiedPurchase] = React.useState(Boolean(review?.verifiedPurchase));
+function ReviewFields({ busy }: { busy: boolean }) {
+  const [productId, setProductId] = React.useState("");
+  const [productHandle, setProductHandle] = React.useState("");
+  const [productTitle, setProductTitle] = React.useState("");
+  const [customerName, setCustomerName] = React.useState("");
+  const [customerEmail, setCustomerEmail] = React.useState("");
+  const [rating, setRating] = React.useState("5");
+  const [title, setTitle] = React.useState("");
+  const [content, setContent] = React.useState("");
+  const [imageUrl, setImageUrl] = React.useState("");
+  const [verifiedPurchase, setVerifiedPurchase] = React.useState(false);
 
   return (
     <Form method="post">
-      <input type="hidden" name="intent" value={intent} />
-      {review ? <input type="hidden" name="id" value={review.id} /> : null}
+      <input type="hidden" name="intent" value="create" />
       <BlockStack gap="300">
-        <TextField label="Product ID" name="productId" value={productId} onChange={setProductId} disabled={intent === "edit"} autoComplete="off" />
-        <TextField label="Product handle" name="productHandle" value={productHandle} onChange={setProductHandle} disabled={intent === "edit"} autoComplete="off" />
+        <TextField label="Product ID" name="productId" value={productId} onChange={setProductId} autoComplete="off" />
+        <TextField label="Product handle" name="productHandle" value={productHandle} onChange={setProductHandle} autoComplete="off" />
         <TextField label="Product title" name="productTitle" value={productTitle} onChange={setProductTitle} autoComplete="off" />
         <TextField label="Customer name" name="customerName" value={customerName} onChange={setCustomerName} autoComplete="name" />
         <TextField label="Customer email" name="customerEmail" value={customerEmail} onChange={setCustomerEmail} type="email" autoComplete="email" />
         <TextField label="Rating" name="rating" value={rating} onChange={setRating} type="number" min={1} max={5} autoComplete="off" />
         <TextField label="Title" name="title" value={title} onChange={setTitle} autoComplete="off" />
         <TextField label="Review content" name="content" value={content} onChange={setContent} multiline={4} autoComplete="off" />
-        {intent === "create" ? (
-          <TextField label="Image URL" name="imageUrl" value={imageUrl} onChange={setImageUrl} type="url" autoComplete="off" />
-        ) : null}
-        {intent === "create" ? (
-          <>
-            <input type="hidden" name="verifiedPurchase" value={verifiedPurchase ? "on" : ""} />
-            <Checkbox label="Verified purchase" checked={verifiedPurchase} onChange={setVerifiedPurchase} />
-          </>
-        ) : null}
-        <Button submit variant="primary" disabled={busy}>{intent === "create" ? "Add review" : "Save review"}</Button>
+        <TextField label="Image URL" name="imageUrl" value={imageUrl} onChange={setImageUrl} type="url" autoComplete="off" />
+        <input type="hidden" name="verifiedPurchase" value={verifiedPurchase ? "on" : ""} />
+        <Checkbox label="Verified purchase" checked={verifiedPurchase} onChange={setVerifiedPurchase} />
+        <Button submit variant="primary" disabled={busy}>Add review</Button>
       </BlockStack>
     </Form>
   );
