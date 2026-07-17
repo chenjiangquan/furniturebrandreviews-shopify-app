@@ -21,6 +21,7 @@ import {
 } from "@shopify/polaris";
 import prisma from "~/db.server";
 import {
+  buildShopifyPlanSelectionUrl,
   currentPlanMonthKey,
   deleteProductReviewWithPlanLimit,
   FREE_MONTHLY_IMPORT_LIMIT,
@@ -125,7 +126,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
   const totalPages = Math.max(1, Math.ceil(reviewCount / perPage));
 
-  return { reviews, questions, view, page, totalPages, reviewCount, sort, perPage, entitlements, usage };
+  return {
+    reviews,
+    questions,
+    view,
+    page,
+    totalPages,
+    reviewCount,
+    sort,
+    perPage,
+    entitlements,
+    usage,
+    upgradeUrl: buildShopifyPlanSelectionUrl(session.shop)
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -233,7 +246,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function ProductReviews() {
-  const { reviews, questions, page, totalPages, perPage, reviewCount, entitlements, usage } = useLoaderData<typeof loader>();
+  const { reviews, questions, page, totalPages, perPage, reviewCount, entitlements, usage, upgradeUrl } = useLoaderData<typeof loader>();
   const [params, setParams] = useSearchParams();
   const navigation = useNavigation();
   const selectedView = params.get("view") === "questions" ? "questions" : "reviews";
@@ -311,7 +324,7 @@ export default function ProductReviews() {
         <ImportReviewsModal open={importOpen} onClose={() => setImportOpen(false)} />
 
         {!entitlements.isPro ? (
-          <Banner title="Free plan monthly import usage" tone="info" action={{ content: "Upgrade to Pro", url: "/app" }}>
+          <Banner title="Free plan monthly import usage" tone="info" action={{ content: "Upgrade to Pro", onAction: () => window.open(upgradeUrl, "_top") }}>
             <Text as="p">
               Imported reviews: {usage.reviewImports}/{usage.importLimit} · Deleted reviews: {usage.reviewDeletions}/{usage.deleteLimit}. Storefront customer reviews are unlimited. Usage resets at the start of each UTC calendar month.
             </Text>

@@ -17,6 +17,18 @@ export type ShopEntitlements = {
 const BILLING_STATUS_CACHE_TTL_MS = 60_000;
 const billingStatusSyncs = new Map<string, Promise<ShopEntitlements>>();
 
+export function buildShopifyPlanSelectionUrl(shopDomain: string) {
+  const storeHandle = shopDomain
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(".myshopify.com", "")
+    .replace(/\/.*$/, "")
+    .trim();
+  const appHandle = process.env.SHOPIFY_APP_HANDLE || "furniture-brand-reviews";
+
+  return `https://admin.shopify.com/store/${storeHandle}/charges/${appHandle}/pricing_plans`;
+}
+
 export class PlanLimitError extends Error {
   status = 429;
 

@@ -16,7 +16,7 @@ import {
 } from "@shopify/polaris";
 import { CheckIcon, XIcon } from "@shopify/polaris-icons";
 import prisma from "~/db.server";
-import { syncAdminEntitlements } from "~/models/entitlements.server";
+import { buildShopifyPlanSelectionUrl, syncAdminEntitlements } from "~/models/entitlements.server";
 import { PRO_PLAN_PRICE } from "~/models/billing-plans";
 import { authenticate, isFreeProShop } from "~/shopify.server";
 
@@ -97,18 +97,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   return { ok: false, plan: "FREE", planSource: "FREE", error: "Unsupported billing action." };
 };
-
-function buildShopifyPlanSelectionUrl(shopDomain: string) {
-  const storeHandle = shopDomain
-    .toLowerCase()
-    .replace(/^https?:\/\//, "")
-    .replace(".myshopify.com", "")
-    .replace(/\/.*$/, "")
-    .trim();
-  const appHandle = process.env.SHOPIFY_APP_HANDLE || "furniture-brand-reviews";
-
-  return `https://admin.shopify.com/store/${storeHandle}/charges/${appHandle}/pricing_plans`;
-}
 
 export default function Dashboard() {
   const data = useLoaderData<typeof loader>();

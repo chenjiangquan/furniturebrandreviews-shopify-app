@@ -12,7 +12,7 @@ import {
   Text
 } from "@shopify/polaris";
 import prisma from "~/db.server";
-import { getShopEntitlements } from "~/models/entitlements.server";
+import { buildShopifyPlanSelectionUrl, getShopEntitlements } from "~/models/entitlements.server";
 import { authenticate } from "~/shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -28,7 +28,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       seoRichSnippetsEnabled: false,
       googleShoppingEnabled: false
     },
-    entitlements
+    entitlements,
+    upgradeUrl: buildShopifyPlanSelectionUrl(session.shop)
   };
 };
 
@@ -58,7 +59,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function GoogleSeoSettings() {
-  const { settings, entitlements } = useLoaderData<typeof loader>();
+  const { settings, entitlements, upgradeUrl } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const navigate = useNavigate();
   const [draft, setDraft] = React.useState({
@@ -86,7 +87,7 @@ export default function GoogleSeoSettings() {
         <input type="hidden" name="reviewsSiteEnabled" value={draft.reviewsSiteEnabled ? "on" : ""} />
         <BlockStack gap="500">
           {!entitlements.isPro ? (
-            <Banner title="Google and SEO requires Pro" tone="info" action={{ content: "Upgrade to Pro", url: "/app" }}>
+            <Banner title="Google and SEO requires Pro" tone="info" action={{ content: "Upgrade to Pro", onAction: () => window.open(upgradeUrl, "_top") }}>
               <Text as="p">Upgrade to enable SEO Rich Snippets, Google Shopping, and Furniture Brand Reviews discovery features.</Text>
             </Banner>
           ) : null}

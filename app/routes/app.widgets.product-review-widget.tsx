@@ -21,7 +21,7 @@ import {
 } from "@shopify/polaris";
 import { Prisma } from "@prisma/client";
 import prisma from "~/db.server";
-import { getShopEntitlements } from "~/models/entitlements.server";
+import { buildShopifyPlanSelectionUrl, getShopEntitlements } from "~/models/entitlements.server";
 import { defaultProductReviewWidgetSettings } from "~/models/product-review-widget-settings";
 import { getProductReviewWidgetSettings } from "~/models/reviews.server";
 import { authenticate } from "~/shopify.server";
@@ -109,6 +109,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
   return {
     entitlements,
+    upgradeUrl: buildShopifyPlanSelectionUrl(session.shop),
     settings: entitlements.isPro ? settings : { ...settings, layoutType: "standard" }
   };
 };
@@ -202,7 +203,7 @@ function sliderNumber(value: number | [number, number]) {
 }
 
 export default function ProductReviewWidgetSettings() {
-  const { entitlements, settings } = useLoaderData<typeof loader>();
+  const { entitlements, settings, upgradeUrl } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const navigate = useNavigate();
   const [draft, setDraft] = React.useState<WidgetSettings>(normalizeWidgetSettings({
@@ -334,7 +335,7 @@ export default function ProductReviewWidgetSettings() {
                         <Badge>Free plan</Badge>
                       </InlineStack>
                       <Text as="p" tone="subdued">Upgrade to Pro to unlock Cards, Carousel, and Sidebar layouts.</Text>
-                      <div><Button url="/app" size="micro">Upgrade to Pro</Button></div>
+                      <div><Button onClick={() => window.open(upgradeUrl, "_top")} size="micro">Upgrade to Pro</Button></div>
                     </BlockStack>
                   </Box>
                 ) : null}

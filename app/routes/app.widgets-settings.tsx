@@ -19,7 +19,7 @@ import {
   TextField
 } from "@shopify/polaris";
 import prisma from "~/db.server";
-import { getShopEntitlements } from "~/models/entitlements.server";
+import { buildShopifyPlanSelectionUrl, getShopEntitlements } from "~/models/entitlements.server";
 import { sendTestNotificationEmail, syncShopContactFromShopify } from "~/models/notifications.server";
 import { authenticate } from "~/shopify.server";
 
@@ -161,6 +161,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       questionEmailNotificationsEnabled: shop.questionEmailNotificationsEnabled
     },
     brandProfileExists: true,
+    upgradeUrl: buildShopifyPlanSelectionUrl(shopDomain),
     appUrl
   };
 };
@@ -261,7 +262,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function WidgetsSettings() {
-  const { entitlements, googleSeoInstalled, productThemeEditorUrl, homeThemeEditorUrl, productLiquidUrl, brandProfile, notificationSettings, appUrl } = useLoaderData<typeof loader>();
+  const { entitlements, googleSeoInstalled, productThemeEditorUrl, homeThemeEditorUrl, productLiquidUrl, brandProfile, notificationSettings, upgradeUrl, appUrl } = useLoaderData<typeof loader>();
   const brandFetcher = useFetcher<typeof action>();
   const notificationFetcher = useFetcher<typeof action>();
   const navigate = useNavigate();
@@ -318,7 +319,7 @@ export default function WidgetsSettings() {
         <WidgetSection title="Brand Trust Widgets">
           {!entitlements.isPro ? (
             <div style={{ gridColumn: "1 / -1" }}>
-              <Banner title="Brand Trust Widgets are a Pro feature" tone="info" action={{ content: "Upgrade to Pro", url: "/app" }}>
+              <Banner title="Brand Trust Widgets are a Pro feature" tone="info" action={{ content: "Upgrade to Pro", onAction: () => openTopLevel(upgradeUrl) }}>
                 <Text as="p">Upgrade to connect a business profile and install the Brand Review Carousel or Brand Micro Trust Badge.</Text>
               </Banner>
             </div>
@@ -469,7 +470,7 @@ export default function WidgetsSettings() {
             <Badge tone={entitlements.isPro && googleSeoInstalled ? "success" : "attention"}>
               {!entitlements.isPro ? "Pro" : googleSeoInstalled ? "Installed" : "Settings only"}
             </Badge>
-            <Button onClick={() => navigate(entitlements.isPro ? "/app/google-seo" : "/app")} variant="primary">
+            <Button onClick={() => entitlements.isPro ? navigate("/app/google-seo") : openTopLevel(upgradeUrl)} variant="primary">
               {entitlements.isPro ? "Manage" : "Upgrade to Pro"}
             </Button>
           </WidgetCard>
@@ -487,6 +488,10 @@ export default function WidgetsSettings() {
 
 export const shouldRevalidate = ({ formMethod, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) =>
   formMethod ? false : defaultShouldRevalidate;
+
+function openTopLevel(url: string) {
+  window.open(url, "_top");
+}
 
 function booleanFromForm(form: FormData, name: string) {
   const value = form.get(name);
