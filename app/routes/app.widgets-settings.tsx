@@ -77,6 +77,7 @@ const defaultBrandProfile = {
 };
 
 const WHATSAPP_SUPPORT_URL = "https://wa.me/447521530350";
+const CLAIM_PROFILE_URL = "https://www.furniturebrandreviews.com/claim-your-profile";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -273,81 +274,105 @@ export default function WidgetsSettings() {
         </WidgetSection>
 
         <WidgetSection title="Brand Trust Widgets">
-          <Card>
-            <BlockStack gap="300">
-              <Text as="h3" variant="headingMd">FurnitureBrandReviews business profile</Text>
-              <Text as="p" tone="subdued">
-                Make sure your business has a profile on FurnitureBrandReviews.com before installing this widget, otherwise the widget may not display any reviews.
-              </Text>
-              <brandFetcher.Form method="post">
-                <input type="hidden" name="intent" value="saveBrandProfile" />
-                <InlineStack gap="300" blockAlign="end">
-                  <div style={{ flex: 1, minWidth: 260 }}>
-                    <TextField
-                      label="Brand name"
-                      name="brandName"
-                      value={brandName}
-                      onChange={setBrandName}
-                      autoComplete="organization"
-                      placeholder="Enter your brand name"
-                    />
-                  </div>
-                  <Button submit variant="primary" loading={brandFetcher.state !== "idle"}>Save brand name</Button>
-                </InlineStack>
-              </brandFetcher.Form>
-              <notificationFetcher.Form method="post">
-                <BlockStack gap="300">
-                  <input type="hidden" name="intent" value="saveNotificationSettings" />
-                  <TextField
-                    label="Notification email"
-                    name="notificationEmail"
-                    type="email"
-                    value={notificationEmail}
-                    onChange={setNotificationEmail}
-                    autoComplete="email"
-                    placeholder="merchant@example.com"
-                    helpText="Receive email notifications when customers submit a new review or question."
-                  />
-                  <Checkbox
-                    label="Email me when a new review is submitted"
-                    name="reviewEmailNotificationsEnabled"
-                    checked={reviewEmailNotificationsEnabled}
-                    onChange={setReviewEmailNotificationsEnabled}
-                  />
-                  <Checkbox
-                    label="Email me when a new question is submitted"
-                    name="questionEmailNotificationsEnabled"
-                    checked={questionEmailNotificationsEnabled}
-                    onChange={setQuestionEmailNotificationsEnabled}
-                  />
-                  <InlineStack gap="300">
-                    <Button submit loading={notificationFetcher.state !== "idle"}>Save notification settings</Button>
-                    <Button
-                      loading={notificationFetcher.state !== "idle"}
-                      onClick={() => {
-                        notificationFetcher.submit(
-                          {
-                            intent: "sendTestEmail",
-                            notificationEmail,
-                            reviewEmailNotificationsEnabled: reviewEmailNotificationsEnabled ? "on" : "",
-                            questionEmailNotificationsEnabled: questionEmailNotificationsEnabled ? "on" : ""
-                          },
-                          { method: "post" }
-                        );
-                      }}
-                    >
-                      Send test email
-                    </Button>
+          <div style={{ alignSelf: "start" }}>
+            <Card>
+              <BlockStack gap="400">
+                <BlockStack gap="200">
+                  <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
+                    <Text as="h3" variant="headingMd">FurnitureBrandReviews business profile</Text>
+                    {brandSlug ? <Badge tone="success">Profile connected</Badge> : <Badge tone="attention">Profile required</Badge>}
                   </InlineStack>
-                  {notificationFetcher.data?.message ? <Badge tone="success">{notificationFetcher.data.message}</Badge> : null}
-                  {notificationFetcher.data?.error ? <Text as="p" tone="critical">{notificationFetcher.data.error}</Text> : null}
+                  <Text as="p" tone="subdued">
+                    Connect your business profile before installing a brand widget so your reviews can load correctly.
+                  </Text>
+                  <div>
+                    <Button url={CLAIM_PROFILE_URL} target="_blank">Claim your business profile</Button>
+                  </div>
                 </BlockStack>
-              </notificationFetcher.Form>
-              {brandSlug ? <Text as="p" tone="subdued">Brand slug: {brandSlug}</Text> : null}
-              {brandFetcher.data?.ok ? <Badge tone="success">Brand name saved</Badge> : null}
-              {brandFetcher.data && !brandFetcher.data.ok ? <Text as="p" tone="critical">{brandFetcher.data.error}</Text> : null}
-            </BlockStack>
-          </Card>
+
+                <Box background="bg-surface-secondary" borderRadius="200" padding="300">
+                  <BlockStack gap="300">
+                    <Text as="h4" variant="headingSm">Business profile</Text>
+                    <brandFetcher.Form method="post">
+                      <BlockStack gap="300">
+                        <input type="hidden" name="intent" value="saveBrandProfile" />
+                        <TextField
+                          label="Brand name"
+                          name="brandName"
+                          value={brandName}
+                          onChange={setBrandName}
+                          autoComplete="organization"
+                          placeholder="Enter your brand name"
+                        />
+                        <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
+                          <Text as="p" tone="subdued">
+                            {brandSlug ? `Brand slug: ${brandSlug}` : "Save a brand name to create its slug."}
+                          </Text>
+                          <Button submit variant="primary" loading={brandFetcher.state !== "idle"}>Save brand name</Button>
+                        </InlineStack>
+                        {brandFetcher.data?.ok ? <Badge tone="success">Brand name saved</Badge> : null}
+                        {brandFetcher.data && !brandFetcher.data.ok ? <Text as="p" tone="critical">{brandFetcher.data.error}</Text> : null}
+                      </BlockStack>
+                    </brandFetcher.Form>
+                  </BlockStack>
+                </Box>
+
+                <Box background="bg-surface-secondary" borderRadius="200" padding="300">
+                  <BlockStack gap="300">
+                    <Text as="h4" variant="headingSm">Email notifications</Text>
+                    <notificationFetcher.Form method="post">
+                      <BlockStack gap="300">
+                        <input type="hidden" name="intent" value="saveNotificationSettings" />
+                        <TextField
+                          label="Notification email"
+                          name="notificationEmail"
+                          type="email"
+                          value={notificationEmail}
+                          onChange={setNotificationEmail}
+                          autoComplete="email"
+                          placeholder="merchant@example.com"
+                          helpText="Receive email notifications when customers submit a new review or question."
+                        />
+                        <Checkbox
+                          label="Email me when a new review is submitted"
+                          name="reviewEmailNotificationsEnabled"
+                          checked={reviewEmailNotificationsEnabled}
+                          onChange={setReviewEmailNotificationsEnabled}
+                        />
+                        <Checkbox
+                          label="Email me when a new question is submitted"
+                          name="questionEmailNotificationsEnabled"
+                          checked={questionEmailNotificationsEnabled}
+                          onChange={setQuestionEmailNotificationsEnabled}
+                        />
+                        <InlineStack gap="300" wrap>
+                          <Button submit loading={notificationFetcher.state !== "idle"}>Save notification settings</Button>
+                          <Button
+                            loading={notificationFetcher.state !== "idle"}
+                            onClick={() => {
+                              notificationFetcher.submit(
+                                {
+                                  intent: "sendTestEmail",
+                                  notificationEmail,
+                                  reviewEmailNotificationsEnabled: reviewEmailNotificationsEnabled ? "on" : "",
+                                  questionEmailNotificationsEnabled: questionEmailNotificationsEnabled ? "on" : ""
+                                },
+                                { method: "post" }
+                              );
+                            }}
+                          >
+                            Send test email
+                          </Button>
+                        </InlineStack>
+                        {notificationFetcher.data?.message ? <Badge tone="success">{notificationFetcher.data.message}</Badge> : null}
+                        {notificationFetcher.data?.error ? <Text as="p" tone="critical">{notificationFetcher.data.error}</Text> : null}
+                      </BlockStack>
+                    </notificationFetcher.Form>
+                  </BlockStack>
+                </Box>
+              </BlockStack>
+            </Card>
+          </div>
           {brandTrustWidgets.map((widget) => {
             const canInstall = Boolean(brandSlug);
             return (
