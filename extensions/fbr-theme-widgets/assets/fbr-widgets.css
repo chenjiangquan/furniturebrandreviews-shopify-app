@@ -907,7 +907,27 @@
   margin: 0;
 }
 
+.fbr-question-author {
+  align-items: center;
+  display: flex;
+  font-weight: 600;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.fbr-question-author .fbr-initials-avatar {
+  flex: 0 0 32px;
+  height: 32px;
+  margin-right: 4px;
+  width: 32px;
+}
+
+.fbr-question-text {
+  font-weight: 700;
+}
+
 .fbr-question-answer {
+  font-weight: 400;
   margin-top: 10px !important;
   padding-top: 10px;
   border-top: 1px solid #eef0f2;

@@ -624,9 +624,12 @@
           <div class="fbr-questions">
             ${questions.length ? questions.map((question) => `
               <article class="fbr-question-item" style="border-color:${escapeAttr(settings.borderColor)}; background:${escapeAttr(settings.cardBackgroundColor)};">
-                <p class="fbr-muted">${escapeHtml(question.customerName || "Customer")} · ${new Date(question.createdAt).toLocaleDateString()}</p>
-                <p><strong>Q:</strong> ${escapeHtml(question.question)}</p>
-                ${question.answer ? `<p class="fbr-question-answer"><strong>A:</strong> ${escapeHtml(question.answer)}</p>` : ""}
+                <div class="fbr-question-author">
+                  <span class="fbr-initials-avatar" style="background:${escapeAttr(settings.avatarBackgroundColor)}; color:${escapeAttr(settings.avatarTextColor)};">${initials(question.customerName || "Customer")}</span>
+                  <span>${escapeHtml(question.customerName || "Customer")}</span>
+                </div>
+                <p class="fbr-question-text">Q: ${escapeHtml(question.question)}</p>
+                ${question.answer ? `<p class="fbr-question-answer">A: ${escapeHtml(question.answer)}</p>` : ""}
               </article>
             `).join("") : `
               <div class="fbr-question-empty">
