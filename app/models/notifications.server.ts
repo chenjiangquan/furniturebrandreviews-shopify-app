@@ -84,6 +84,76 @@ export async function sendReviewNotification(shopDomain: string, review: Product
   }
 }
 
+export async function sendAppOwnerReviewNotification(shopDomain: string, review: ProductReview) {
+  try {
+    const shop = await getShopForNotification(shopDomain);
+    const to = appOwnerNotificationEmail();
+    const sourceLabel = review.source === "IMPORTED" ? "Imported review" : "Storefront customer review";
+
+    await sendEmail({
+      to,
+      subject: `${sourceLabel}: ${shop.storeName || shop.shopDomain}`,
+      html: baseEmailTemplate({
+        eyebrow: sourceLabel,
+        heading: `${sourceLabel} received`,
+        intro: `A review was added by ${shop.storeName || shop.shopDomain}.`,
+        shopDomain: shop.shopDomain,
+        content: `
+          <div style="background:#f8faf9;border:1px solid #dde5e1;border-radius:14px;padding:18px;margin:18px 0;">
+            <div style="font-size:13px;line-height:20px;color:#667085;margin-bottom:6px;">Rating</div>
+            <div style="font-size:22px;line-height:28px;color:#f5a623;font-weight:700;letter-spacing:1px;">${ratingStars(review.rating)} <span style="font-size:14px;color:#344054;font-weight:600;">${review.rating}/5</span></div>
+            <h2 style="font-size:20px;line-height:28px;color:#101828;margin:14px 0 8px;">${escapeHtml(review.title)}</h2>
+            <p style="font-size:15px;line-height:24px;color:#344054;margin:0;">${escapeHtml(review.content)}</p>
+          </div>
+          ${infoRows([
+            ["Source", sourceLabel],
+            ["Store", shop.storeName || shop.shopDomain],
+            ["Shop domain", shop.shopDomain],
+            ["Product", review.productTitle || review.productHandle || review.productId],
+            ["Customer", review.customerName],
+            ["Customer email", review.customerEmail || "Not provided"],
+            ["Submitted at", formatEmailDate(review.createdAt)]
+          ])}
+        `
+      })
+    });
+  } catch (error) {
+    console.error("Failed to send app owner review notification email", error);
+  }
+}
+
+export async function sendAppOwnerImportNotification(
+  shopDomain: string,
+  result: { importedCount: number; skippedCount: number }
+) {
+  if (result.importedCount < 1) return;
+
+  try {
+    const shop = await getShopForNotification(shopDomain);
+    const to = appOwnerNotificationEmail();
+
+    await sendEmail({
+      to,
+      subject: `Reviews imported: ${shop.storeName || shop.shopDomain} (${result.importedCount})`,
+      html: baseEmailTemplate({
+        eyebrow: "Review import",
+        heading: "A brand imported reviews",
+        intro: `${shop.storeName || shop.shopDomain} completed a review import.`,
+        shopDomain: shop.shopDomain,
+        content: infoRows([
+          ["Store", shop.storeName || shop.shopDomain],
+          ["Shop domain", shop.shopDomain],
+          ["Reviews imported", String(result.importedCount)],
+          ["Duplicates or invalid rows skipped", String(result.skippedCount)],
+          ["Imported at", formatEmailDate(new Date())]
+        ])
+      })
+    });
+  } catch (error) {
+    console.error("Failed to send app owner import notification email", error);
+  }
+}
+
 export async function sendQuestionNotification(shopDomain: string, question: ProductQuestion) {
   try {
     const shop = await getShopForNotification(shopDomain);
@@ -129,7 +199,7 @@ export async function sendTestNotificationEmail(shopDomain: string) {
 
 export async function sendAppInstallOwnerNotification(shopDomain: string, event: "install" | "reinstall" = "install") {
   try {
-    const to = String(process.env.APP_OWNER_NOTIFICATION_EMAIL || "chenjiangquan123@gmail.com").trim();
+    const to = appOwnerNotificationEmail();
 
     const shop = await getShopForNotification(shopDomain);
     const eventLabel = event === "reinstall" ? "Shopify app reinstalled" : "New Shopify app install";
@@ -172,6 +242,10 @@ async function getShopForNotification(shopDomain: string) {
 
 function notificationRecipient(shop: Shop) {
   return firstEmail(shop.notificationEmail, shop.storeEmail, shop.contactEmail, shop.shopOwnerEmail);
+}
+
+function appOwnerNotificationEmail() {
+  return String(process.env.APP_OWNER_NOTIFICATION_EMAIL || "chenjiangquan123@gmail.com").trim();
 }
 
 function firstEmail(...values: Array<string | null | undefined>) {

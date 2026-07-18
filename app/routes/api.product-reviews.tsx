@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import prisma from "~/db.server";
 import { getShopEntitlements } from "~/models/entitlements.server";
-import { sendReviewNotification } from "~/models/notifications.server";
+import { sendAppOwnerReviewNotification, sendReviewNotification } from "~/models/notifications.server";
 import {
   clampRating,
   corsJson,
@@ -104,7 +104,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     verifiedPurchase: false,
     source: "STOREFRONT"
   });
-  await sendReviewNotification(shopDomain, review);
+  await Promise.all([
+    sendReviewNotification(shopDomain, review),
+    sendAppOwnerReviewNotification(shopDomain, review)
+  ]);
 
   return corsJson({
     ok: true,

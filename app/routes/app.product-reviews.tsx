@@ -20,6 +20,7 @@ import {
   TextField
 } from "@shopify/polaris";
 import prisma from "~/db.server";
+import { sendAppOwnerImportNotification } from "~/models/notifications.server";
 import {
   buildShopifyPlanSelectionUrl,
   currentPlanMonthKey,
@@ -214,6 +215,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
 
       const importResult = await importReviewsFromCsv(session.shop, await file.text(), entitlements.isPro);
+      await sendAppOwnerImportNotification(session.shop, importResult);
       return { ok: true, error: "", ...importResult };
     } catch (error) {
       console.error("CSV import failed", error);
