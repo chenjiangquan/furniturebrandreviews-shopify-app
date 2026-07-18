@@ -1,4 +1,19 @@
 {{ 'fbr-widgets.css' | asset_url | stylesheet_tag }}
+<script>
+  (() => {
+    const configuredBase = {{ block.settings.api_base_url | json }}.replace(/\/$/, '');
+    const apiBase = configuredBase === '/apps/fbr' ? 'https://app.furniturebrandreviews.com' : configuredBase;
+    const url = `${apiBase}/api/product-reviews?shop=${encodeURIComponent({{ shop.permanent_domain | json }})}&productId=${encodeURIComponent({{ product.id | json }})}&productHandle=${encodeURIComponent({{ product.handle | json }})}&productTitle=${encodeURIComponent({{ product.title | json }})}`;
+    window.__fbrEarlyFetches = window.__fbrEarlyFetches || {};
+    if (!window.__fbrEarlyFetches[url]) {
+      window.__fbrEarlyFetches[url] = fetch(url).then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || data.ok === false) throw new Error(data.error || data.message || 'Request failed');
+        return data;
+      });
+    }
+  })();
+</script>
 <script src="{{ 'fbr-widgets.js' | asset_url }}" defer></script>
 
 <div

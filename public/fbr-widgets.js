@@ -96,7 +96,8 @@
       if (cached) fetchCache.delete(url);
       if (inflightFetches.has(url)) return inflightFetches.get(url);
     }
-    const request = (async () => {
+    const earlyFetch = cacheable && window.__fbrEarlyFetches?.[url];
+    const request = earlyFetch || (async () => {
       const response = await fetch(url, options);
       const text = await response.text();
       let data = {};
@@ -113,9 +114,14 @@
     })();
     if (cacheable) inflightFetches.set(url, request);
     try {
-      return await request;
+      const data = await request;
+      if (cacheable) fetchCache.set(url, { data, expires: Date.now() + fetchCacheTtl });
+      return data;
     } finally {
       if (cacheable) inflightFetches.delete(url);
+      if (earlyFetch && window.__fbrEarlyFetches?.[url] === earlyFetch) {
+        delete window.__fbrEarlyFetches[url];
+      }
     }
   }
 
