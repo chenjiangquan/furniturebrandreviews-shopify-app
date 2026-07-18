@@ -168,7 +168,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  const entitlements = await getShopEntitlements(session.shop);
   const form = await request.formData();
   const intent = String(form.get("intent") || "");
 
@@ -224,10 +223,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent !== "saveBrandProfile") {
     return { ok: false, id: "", error: "Unsupported action.", message: "", brandProfile: null };
-  }
-
-  if (!entitlements.isPro) {
-    return { ok: false, id: "", error: "Brand Trust Widgets require the Pro plan.", message: "", brandProfile: null };
   }
 
   const brandName = String(form.get("brandName") || "").trim();
@@ -320,7 +315,7 @@ export default function WidgetsSettings() {
           {!entitlements.isPro ? (
             <div style={{ gridColumn: "1 / -1" }}>
               <Banner title="Brand Trust Widgets are a Pro feature" tone="info" action={{ content: "Upgrade to Pro", onAction: () => openTopLevel(upgradeUrl) }}>
-                <Text as="p">Upgrade to connect a business profile and install the Brand Review Carousel or Brand Micro Trust Badge.</Text>
+                <Text as="p">Business profile setup is included on Free. Upgrade to install the Brand Review Carousel or Brand Micro Trust Badge.</Text>
               </Banner>
             </div>
           ) : null}
@@ -330,13 +325,13 @@ export default function WidgetsSettings() {
                 <BlockStack gap="200">
                   <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
                     <Text as="h3" variant="headingMd">FurnitureBrandReviews business profile</Text>
-                    {!entitlements.isPro ? <Badge>Pro</Badge> : brandSlug ? <Badge tone="success">Profile connected</Badge> : <Badge tone="attention">Profile required</Badge>}
+                    {brandSlug ? <Badge tone="success">Profile connected</Badge> : <Badge tone="attention">Profile not connected</Badge>}
                   </InlineStack>
                   <Text as="p" tone="subdued">
                     Connect your business profile before installing a brand widget so your reviews can load correctly.
                   </Text>
                   <div>
-                    <Button url={CLAIM_PROFILE_URL} target="_blank" disabled={!entitlements.isPro}>Claim your business profile</Button>
+                    <Button url={CLAIM_PROFILE_URL} target="_blank">Claim your business profile</Button>
                   </div>
                 </BlockStack>
 
@@ -353,13 +348,12 @@ export default function WidgetsSettings() {
                           onChange={setBrandName}
                           autoComplete="organization"
                           placeholder="Enter your brand name"
-                          disabled={!entitlements.isPro}
                         />
                         <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
                           <Text as="p" tone="subdued">
                             {brandSlug ? `Brand slug: ${brandSlug}` : "Save a brand name to create its slug."}
                           </Text>
-                          <Button submit variant="primary" loading={brandFetcher.state !== "idle"} disabled={!entitlements.isPro}>Save brand name</Button>
+                          <Button submit variant="primary" loading={brandFetcher.state !== "idle"}>Save brand name</Button>
                         </InlineStack>
                         {brandFetcher.data?.ok ? <Badge tone="success">Brand name saved</Badge> : null}
                         {brandFetcher.data && !brandFetcher.data.ok ? <Text as="p" tone="critical">{brandFetcher.data.error}</Text> : null}
