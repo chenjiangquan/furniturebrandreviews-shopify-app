@@ -20,6 +20,7 @@ import {
   TextField
 } from "@shopify/polaris";
 import prisma from "~/db.server";
+import { adminLoaderCacheKey, cachedAdminLoader, invalidateAdminLoaderCache } from "~/models/admin-loader-cache.server";
 import { sendAppOwnerImportNotification } from "~/models/notifications.server";
 import {
   buildShopifyPlanSelectionUrl,
@@ -49,7 +50,6 @@ const pageSizeOptions = [20, 30];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  const entitlementsPromise = getShopEntitlements(session.shop);
   const url = new URL(request.url);
   const query = (url.searchParams.get("q") || "").trim();
   const rating = url.searchParams.get("rating") || "";
@@ -109,41 +109,45 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
   }
 
-  const [reviews, reviewCount, questions, usage, entitlements] = await Promise.all([
-    view === "reviews"
-      ? prisma.productReview.findMany({
-          where,
-          orderBy: { createdAt: "desc" },
-          skip: (page - 1) * perPage,
-          take: perPage
-        })
-      : Promise.resolve([]),
-    view === "reviews" ? prisma.productReview.count({ where }) : Promise.resolve(0),
-    view === "questions"
-      ? prisma.productQuestion.findMany({ where: questionWhere, orderBy: { createdAt: "desc" }, take: 100 })
-      : Promise.resolve([]),
-    getMonthlyPlanUsage(session.shop),
-    entitlementsPromise
-  ]);
-  const totalPages = Math.max(1, Math.ceil(reviewCount / perPage));
+  const cacheKey = adminLoaderCacheKey(session.shop, "product-reviews", url.searchParams.toString());
+  return cachedAdminLoader(cacheKey, async () => {
+    const [reviews, reviewCount, questions, usage, entitlements] = await Promise.all([
+      view === "reviews"
+        ? prisma.productReview.findMany({
+            where,
+            orderBy: { createdAt: "desc" },
+            skip: (page - 1) * perPage,
+            take: perPage
+          })
+        : Promise.resolve([]),
+      view === "reviews" ? prisma.productReview.count({ where }) : Promise.resolve(0),
+      view === "questions"
+        ? prisma.productQuestion.findMany({ where: questionWhere, orderBy: { createdAt: "desc" }, take: 100 })
+        : Promise.resolve([]),
+      getMonthlyPlanUsage(session.shop),
+      getShopEntitlements(session.shop)
+    ]);
+    const totalPages = Math.max(1, Math.ceil(reviewCount / perPage));
 
-  return {
-    reviews,
-    questions,
-    view,
-    page,
-    totalPages,
-    reviewCount,
-    sort,
-    perPage,
-    entitlements,
-    usage,
-    upgradeUrl: buildShopifyPlanSelectionUrl(session.shop)
-  };
+    return {
+      reviews,
+      questions,
+      view,
+      page,
+      totalPages,
+      reviewCount,
+      sort,
+      perPage,
+      entitlements,
+      usage,
+      upgradeUrl: buildShopifyPlanSelectionUrl(session.shop)
+    };
+  });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
+  invalidateAdminLoaderCache(session.shop);
   const entitlements = await getShopEntitlements(session.shop);
   const form = await request.formData();
   const intent = String(form.get("intent"));

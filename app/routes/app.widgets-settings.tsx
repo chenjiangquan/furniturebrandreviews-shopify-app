@@ -19,6 +19,7 @@ import {
   TextField
 } from "@shopify/polaris";
 import prisma from "~/db.server";
+import { adminLoaderCacheKey, cachedAdminLoader, invalidateAdminLoaderCache } from "~/models/admin-loader-cache.server";
 import { buildShopifyPlanSelectionUrl, getShopEntitlements } from "~/models/entitlements.server";
 import { sendTestNotificationEmail, syncShopContactFromShopify } from "~/models/notifications.server";
 import { authenticate } from "~/shopify.server";
@@ -83,7 +84,7 @@ const CLAIM_PROFILE_URL = "https://www.furniturebrandreviews.com/claim-your-prof
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
-  const entitlementsPromise = getShopEntitlements(shopDomain);
+  let entitlements: Awaited<ReturnType<typeof getShopEntitlements>>;
   let widgetSettings = {
     brandName: defaultBrandProfile.brandName,
     brandSlug: defaultBrandProfile.brandSlug,
@@ -102,11 +103,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     questionEmailNotificationsEnabled: true
   };
   try {
-    const [loadedWidgetSettings, loadedGoogleSeoSettings, loadedShop] = await Promise.all([
-      prisma.widgetSettings.findUnique({ where: { shopDomain } }),
-      prisma.googleSeoSettings.findUnique({ where: { shopDomain } }),
-      prisma.shop.findUnique({ where: { shopDomain } })
-    ]);
+    const [loadedWidgetSettings, loadedGoogleSeoSettings, loadedShop, loadedEntitlements] = await cachedAdminLoader(
+      adminLoaderCacheKey(shopDomain, "widgets-settings"),
+      () => Promise.all([
+        prisma.widgetSettings.findUnique({ where: { shopDomain } }),
+        prisma.googleSeoSettings.findUnique({ where: { shopDomain } }),
+        prisma.shop.findUnique({ where: { shopDomain } }),
+        getShopEntitlements(shopDomain)
+      ])
+    );
+    entitlements = loadedEntitlements;
     const shouldSyncShopContact = Boolean(
       loadedShop &&
       session.accessToken &&
@@ -130,8 +136,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   } catch (error) {
     console.error("Widgets Settings loader failed; rendering fallback UI", error);
+    entitlements = await getShopEntitlements(shopDomain);
   }
-  const entitlements = await entitlementsPromise;
 
   const productThemeEditorUrl = `https://${session.shop}/admin/themes/current/editor?template=product`;
   const homeThemeEditorUrl = `https://${session.shop}/admin/themes/current/editor?template=index`;
@@ -168,6 +174,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
+  invalidateAdminLoaderCache(session.shop);
   const form = await request.formData();
   const intent = String(form.get("intent") || "");
 

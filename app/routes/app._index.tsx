@@ -16,7 +16,12 @@ import {
 } from "@shopify/polaris";
 import { CheckIcon, XIcon } from "@shopify/polaris-icons";
 import prisma from "~/db.server";
-import { buildShopifyPlanSelectionUrl, syncAdminEntitlements } from "~/models/entitlements.server";
+import { adminLoaderCacheKey, cachedAdminLoader, invalidateAdminLoaderCache } from "~/models/admin-loader-cache.server";
+import {
+  buildShopifyPlanSelectionUrl,
+  invalidateShopEntitlementsCache,
+  syncAdminEntitlements
+} from "~/models/entitlements.server";
 import { PRO_PLAN_PRICE } from "~/models/billing-plans";
 import { authenticate, isFreeProShop } from "~/shopify.server";
 
@@ -42,18 +47,20 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<Dashboard
   try {
     const { billing, session } = await authenticate.admin(request);
     const shopDomain = session.shop;
-    const [{ totalReviews }, billingStatus] = await Promise.all([
-      getDashboardReviewStats(shopDomain),
-      syncAdminEntitlements(shopDomain, billing)
-    ]);
+    return cachedAdminLoader(adminLoaderCacheKey(shopDomain, "dashboard"), async () => {
+      const [{ totalReviews }, billingStatus] = await Promise.all([
+        getDashboardReviewStats(shopDomain),
+        syncAdminEntitlements(shopDomain, billing)
+      ]);
 
-    return {
-      totalReviews,
-      brandWidgetStatus: "Active",
-      plan: billingStatus.plan,
-      planSource: billingStatus.planSource,
-      subscriptionId: ""
-    };
+      return {
+        totalReviews,
+        brandWidgetStatus: "Active",
+        plan: billingStatus.plan,
+        planSource: billingStatus.planSource,
+        subscriptionId: ""
+      };
+    });
   } catch (error) {
     if (error instanceof Response) {
       throw error;
@@ -74,6 +81,8 @@ async function getDashboardReviewStats(shopDomain: string) {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { redirect, session } = await authenticate.admin(request);
+  invalidateAdminLoaderCache(session.shop);
+  invalidateShopEntitlementsCache(session.shop);
   const form = await request.formData();
   const intent = String(form.get("intent") || "");
 

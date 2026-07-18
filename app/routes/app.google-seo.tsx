@@ -12,6 +12,7 @@ import {
   Text
 } from "@shopify/polaris";
 import prisma from "~/db.server";
+import { invalidateAdminLoaderCache } from "~/models/admin-loader-cache.server";
 import { buildShopifyPlanSelectionUrl, getShopEntitlements } from "~/models/entitlements.server";
 import { authenticate } from "~/shopify.server";
 
@@ -35,6 +36,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
+  invalidateAdminLoaderCache(session.shop);
   const entitlements = await getShopEntitlements(session.shop);
   if (!entitlements.isPro) {
     return { ok: false, error: "Google and SEO settings require the Pro plan." };

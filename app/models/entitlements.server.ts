@@ -15,7 +15,12 @@ export type ShopEntitlements = {
 };
 
 const BILLING_STATUS_CACHE_TTL_MS = 60_000;
+const ENTITLEMENTS_CACHE_TTL_MS = 15_000;
+const MAX_ENTITLEMENTS_CACHE_ENTRIES = 500;
 const billingStatusSyncs = new Map<string, Promise<ShopEntitlements>>();
+type PersistedEntitlements = Awaited<ReturnType<typeof readPersistedShopEntitlements>>;
+const persistedEntitlementsCache = new Map<string, { expiresAt: number; value: PersistedEntitlements }>();
+const persistedEntitlementsReads = new Map<string, Promise<PersistedEntitlements>>();
 
 export function buildShopifyPlanSelectionUrl(shopDomain: string) {
   const storeHandle = shopDomain
@@ -104,6 +109,32 @@ export async function getShopEntitlements(shopDomain: string): Promise<ShopEntit
 }
 
 async function getPersistedShopEntitlements(shopDomain: string) {
+  const cached = persistedEntitlementsCache.get(shopDomain);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (cached) persistedEntitlementsCache.delete(shopDomain);
+
+  const existingRead = persistedEntitlementsReads.get(shopDomain);
+  if (existingRead) return existingRead;
+
+  const read = readPersistedShopEntitlements(shopDomain);
+  persistedEntitlementsReads.set(shopDomain, read);
+  try {
+    const value = await read;
+    if (persistedEntitlementsCache.size >= MAX_ENTITLEMENTS_CACHE_ENTRIES) {
+      const oldestShop = persistedEntitlementsCache.keys().next().value;
+      if (oldestShop) persistedEntitlementsCache.delete(oldestShop);
+    }
+    persistedEntitlementsCache.set(shopDomain, {
+      expiresAt: Date.now() + ENTITLEMENTS_CACHE_TTL_MS,
+      value
+    });
+    return value;
+  } finally {
+    if (persistedEntitlementsReads.get(shopDomain) === read) persistedEntitlementsReads.delete(shopDomain);
+  }
+}
+
+async function readPersistedShopEntitlements(shopDomain: string) {
   const subscription = await prisma.subscriptionSettings.findUnique({
     where: { shopDomain },
     select: { plan: true, updatedAt: true }
@@ -118,6 +149,11 @@ async function getPersistedShopEntitlements(shopDomain: string) {
     },
     checkedAt: subscription?.updatedAt || null
   };
+}
+
+export function invalidateShopEntitlementsCache(shopDomain: string) {
+  persistedEntitlementsCache.delete(shopDomain);
+  persistedEntitlementsReads.delete(shopDomain);
 }
 
 export async function getMonthlyPlanUsage(shopDomain: string, now = new Date()) {
@@ -182,10 +218,12 @@ function calendarMonth(now: Date) {
 }
 
 async function persistPlan(shopDomain: string, plan: AppPlan) {
+  invalidateShopEntitlementsCache(shopDomain);
   await prisma.shop.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } });
   await prisma.subscriptionSettings.upsert({
     where: { shopDomain },
     update: { plan },
     create: { shopDomain, plan }
   });
+  invalidateShopEntitlementsCache(shopDomain);
 }
