@@ -16,9 +16,18 @@
   const productReviewSummaryUrl = (el) => `${productReviewUrl(el)}&summaryOnly=1`;
   const fetchCache = new Map();
   const inflightFetches = new Map();
+  const usefulCountOverrides = new Map();
   const fetchCacheTtl = 60000;
   const persistentCacheTtl = 60000;
   const persistentCachePrefix = "fbr_cache_v2:";
+
+  const usefulCountKey = (el, reviewId) => `${shop(el)}:${reviewId}`;
+
+  function displayedUsefulCount(el, review) {
+    const serverCount = Number(review.usefulCount) || 0;
+    const override = usefulCountOverrides.get(usefulCountKey(el, review.id));
+    return override === undefined ? serverCount : Math.max(serverCount, override);
+  }
   const defaultProductSettings = {
     productReviewsEnabled: true,
     productReviewWidgetEnabled: true,
@@ -599,9 +608,9 @@
                 ${review.imageUrl ? `<button class="fbr-review-image-button" type="button" data-fbr-image-preview="${escapeAttr(review.imageUrl)}" aria-label="Open review photo"><img class="fbr-review-image" src="${escapeAttr(review.imageUrl)}" alt="" onerror="this.closest('button').remove();"></button>` : ""}
                 <div class="fbr-helpful-row" aria-label="Review helpfulness">
                   <span class="fbr-helpful-label">Helpful?</span>
-                  <button class="fbr-helpful-action" type="button" data-fbr-useful-review-id="${escapeAttr(review.id)}" data-fbr-useful-count="${Number(review.usefulCount) || 0}" aria-label="Mark review as helpful">
+                  <button class="fbr-helpful-action" type="button" data-fbr-useful-review-id="${escapeAttr(review.id)}" data-fbr-useful-count="${displayedUsefulCount(el, review)}" aria-label="Mark review as helpful">
                     ${thumbIcon("up")}
-                    <span data-fbr-helpful-count>${Number(review.usefulCount) || 0}</span>
+                    <span data-fbr-helpful-count>${displayedUsefulCount(el, review)}</span>
                   </button>
                   <button class="fbr-helpful-action" type="button" data-fbr-not-helpful-review-id="${escapeAttr(review.id)}" data-fbr-not-helpful-count="0" aria-label="Mark review as not helpful">
                     ${thumbIcon("down")}
@@ -982,6 +991,8 @@
         if (button.disabled || window.localStorage.getItem(storageKey)) return;
         const currentCount = Number(button.dataset.fbrUsefulCount || 0);
         const optimisticCount = currentCount + 1;
+        const overrideKey = usefulCountKey(el, reviewId);
+        usefulCountOverrides.set(overrideKey, optimisticCount);
         button.disabled = true;
         button.dataset.fbrUsefulCount = String(optimisticCount);
         updateHelpfulCount(button, optimisticCount);
@@ -1002,9 +1013,15 @@
             });
           }
           window.localStorage.setItem(storageKey, "1");
-          button.dataset.fbrUsefulCount = String(Number(result.usefulCount) || optimisticCount);
-          updateHelpfulCount(button, Number(result.usefulCount) || optimisticCount);
+          const confirmedCount = Number.isFinite(Number(result.usefulCount))
+            ? Number(result.usefulCount)
+            : optimisticCount;
+          const displayedCount = Math.max(optimisticCount, confirmedCount);
+          usefulCountOverrides.set(overrideKey, displayedCount);
+          button.dataset.fbrUsefulCount = String(displayedCount);
+          updateHelpfulCount(button, displayedCount);
         } catch (error) {
+          usefulCountOverrides.delete(overrideKey);
           button.dataset.fbrUsefulCount = String(currentCount);
           updateHelpfulCount(button, currentCount);
           button.classList.remove("fbr-helpful-action-used");

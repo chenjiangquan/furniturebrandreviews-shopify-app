@@ -42,8 +42,10 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<Dashboard
   try {
     const { billing, session } = await authenticate.admin(request);
     const shopDomain = session.shop;
-    const { totalReviews } = await getDashboardReviewStats(shopDomain);
-    const billingStatus = await syncAdminEntitlements(shopDomain, billing);
+    const [{ totalReviews }, billingStatus] = await Promise.all([
+      getDashboardReviewStats(shopDomain),
+      syncAdminEntitlements(shopDomain, billing)
+    ]);
 
     return {
       totalReviews,

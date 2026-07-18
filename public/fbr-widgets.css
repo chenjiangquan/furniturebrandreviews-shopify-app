@@ -627,7 +627,11 @@
 }
 
 .fbr-helpful-action:hover {
-  color: var(--fbr-primary);
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: #6d7175 !important;
+  text-decoration: none !important;
 }
 
 .fbr-helpful-action:disabled {
@@ -637,6 +641,10 @@
 .fbr-helpful-action-used {
   color: var(--fbr-primary);
   font-weight: 600;
+}
+
+.fbr-helpful-action-used:hover {
+  color: var(--fbr-primary) !important;
 }
 
 .fbr-helpful-action-disabled {
