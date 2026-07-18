@@ -13,6 +13,8 @@ import {
 } from "~/models/reviews.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
+  if (request.method === "OPTIONS") return corsJson({});
+
   const url = new URL(request.url);
   const shop = requiredString(url.searchParams.get("shop"), "shop");
   const productId = String(url.searchParams.get("productId") || "").trim();

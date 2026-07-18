@@ -8,6 +8,8 @@ import {
 } from "~/models/reviews.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
+  if (request.method === "OPTIONS") return corsJson({});
+
   const url = new URL(request.url);
   const shopDomain = requiredString(url.searchParams.get("shop"), "shop");
   const productId = requiredString(url.searchParams.get("productId"), "productId");
