@@ -18,7 +18,9 @@
   const inflightFetches = new Map();
   const usefulCountOverrides = new Map();
   const fetchCacheTtl = 60000;
-  const persistentCacheTtl = 60000;
+  // Reviews can refresh in the background, while returning visitors get an
+  // immediate render instead of waiting for a cross-region cold request.
+  const persistentCacheTtl = 10 * 60 * 1000;
   const persistentCachePrefix = "fbr_cache_v2:";
 
   const usefulCountKey = (el, reviewId) => `${shop(el)}:${reviewId}`;

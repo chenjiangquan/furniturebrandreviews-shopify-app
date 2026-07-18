@@ -1,16 +1,56 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import prisma from "~/db.server";
-import { getShopEntitlements } from "~/models/entitlements.server";
 import { sendAppOwnerReviewNotification, sendReviewNotification } from "~/models/notifications.server";
 import {
   clampRating,
   corsJson,
   createProductReview,
-  getProductReviewRatingSummary,
+  getProductReviewPublicBundle,
   getProductReviewWidgetSettings,
   getProductReviewSummary,
   requiredString
 } from "~/models/reviews.server";
+import { isFreeProShop } from "~/shopify.server";
+
+const PUBLIC_WIDGET_CACHE_TTL_MS = 5 * 60_000;
+const MAX_PUBLIC_WIDGET_CACHE_ENTRIES = 500;
+const publicWidgetCache = new Map<string, { expiresAt: number; data: Record<string, unknown> }>();
+
+function publicWidgetCacheKey(
+  shop: string,
+  productId: string,
+  productHandle: string,
+  productTitle: string,
+  summaryOnly: boolean
+) {
+  return JSON.stringify([shop, productId, productHandle, productTitle, summaryOnly]);
+}
+
+function readPublicWidgetCache(key: string) {
+  const cached = publicWidgetCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+  if (cached) publicWidgetCache.delete(key);
+  return null;
+}
+
+function writePublicWidgetCache(key: string, data: Record<string, unknown>) {
+  if (publicWidgetCache.size >= MAX_PUBLIC_WIDGET_CACHE_ENTRIES) {
+    const oldestKey = publicWidgetCache.keys().next().value;
+    if (oldestKey) publicWidgetCache.delete(oldestKey);
+  }
+  publicWidgetCache.set(key, { expiresAt: Date.now() + PUBLIC_WIDGET_CACHE_TTL_MS, data });
+}
+
+function clearPublicWidgetCache(shop: string) {
+  for (const key of publicWidgetCache.keys()) {
+    if (key.startsWith(`["${shop.replaceAll('"', '\\"')}",`)) publicWidgetCache.delete(key);
+  }
+}
+
+const publicCacheHeaders = {
+  "Cache-Control": "public, max-age=60, stale-while-revalidate=600",
+  "CDN-Cache-Control": "public, max-age=300, stale-while-revalidate=600",
+  "Vercel-CDN-Cache-Control": "public, max-age=300, stale-while-revalidate=600"
+};
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (request.method === "OPTIONS") return corsJson({});
@@ -23,19 +63,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (!productId && !productHandle && !productTitle) {
     throw new Response("productId, productHandle, or productTitle is required.", { status: 400 });
   }
-  if (url.searchParams.get("summaryOnly") === "1") {
-    const [summary, settings, googleSeoSettings, entitlements] = await Promise.all([
-      getProductReviewRatingSummary(shop, productId, productHandle, productTitle),
-      getProductReviewWidgetSettings(shop),
-      prisma.googleSeoSettings.findUnique({
-        where: { shopDomain: shop },
-        select: { seoRichSnippetsEnabled: true }
-      }),
-      getShopEntitlements(shop)
-    ]);
-    return corsJson({
-      ...summary,
-      seoRichSnippetsEnabled: entitlements.isPro && Boolean(googleSeoSettings?.seoRichSnippetsEnabled),
+  const summaryOnly = url.searchParams.get("summaryOnly") === "1";
+  const cacheKey = publicWidgetCacheKey(shop, productId, productHandle, productTitle, summaryOnly);
+  const cachedData = readPublicWidgetCache(cacheKey);
+  if (cachedData) return corsJson(cachedData, { headers: publicCacheHeaders });
+
+  const bundle = await getProductReviewPublicBundle(shop, productId, productHandle, productTitle);
+  const settings = bundle.settings || await getProductReviewWidgetSettings(shop);
+  const entitlements = isFreeProShop(shop)
+    ? { isPro: true }
+    : { isPro: bundle.plan === "PRO" };
+  let summary = bundle.summary;
+  if (summary.reviewCount === 0 && (productHandle || productTitle)) {
+    summary = await getProductReviewSummary(shop, productId, productHandle, productTitle);
+  }
+
+  if (summaryOnly) {
+    const data = {
+      averageRating: summary.averageRating,
+      reviewCount: summary.reviewCount,
+      seoRichSnippetsEnabled: entitlements.isPro && bundle.seoRichSnippetsEnabled,
       starRatingBadgeSettings: {
         starColor: settings.starRatingBadgeStarColor,
         textColor: settings.starRatingBadgeTextColor,
@@ -45,25 +92,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         borderRadius: settings.starRatingBadgeBorderRadius,
         hideNoReviewProduct: settings.starRatingBadgeHideNoReviewProduct
       }
-    }, {
-      headers: {
-        "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600"
-      }
-    });
+    };
+    writePublicWidgetCache(cacheKey, data);
+    return corsJson(data, { headers: publicCacheHeaders });
   }
-  const [summary, settings, googleSeoSettings, entitlements] = await Promise.all([
-    getProductReviewSummary(shop, productId, productHandle, productTitle),
-    getProductReviewWidgetSettings(shop),
-    prisma.googleSeoSettings.findUnique({
-      where: { shopDomain: shop },
-      select: { seoRichSnippetsEnabled: true }
-    }),
-    getShopEntitlements(shop)
-  ]);
   const { id, shopDomain, createdAt, updatedAt, ...widgetSettings } = settings;
-  return corsJson({
+  const data = {
     ...summary,
-    seoRichSnippetsEnabled: entitlements.isPro && Boolean(googleSeoSettings?.seoRichSnippetsEnabled),
+    seoRichSnippetsEnabled: entitlements.isPro && bundle.seoRichSnippetsEnabled,
     starRatingBadgeSettings: {
       starColor: settings.starRatingBadgeStarColor,
       textColor: settings.starRatingBadgeTextColor,
@@ -77,11 +113,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       ...widgetSettings,
       layoutType: entitlements.isPro ? widgetSettings.layoutType : "standard"
     }
-  }, {
-    headers: {
-      "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600"
-    }
-  });
+  };
+  writePublicWidgetCache(cacheKey, data);
+  return corsJson(data, { headers: publicCacheHeaders });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -106,6 +140,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     verifiedPurchase: false,
     source: "STOREFRONT"
   });
+  clearPublicWidgetCache(shopDomain);
   await Promise.all([
     sendReviewNotification(shopDomain, review),
     sendAppOwnerReviewNotification(shopDomain, review)

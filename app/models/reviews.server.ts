@@ -231,6 +231,102 @@ export async function getProductReviewSummary(
   };
 }
 
+type PublicProductReviewBundleRow = {
+  reviews: ProductReview[];
+  questions: ProductQuestion[];
+  settings: Awaited<ReturnType<typeof getProductReviewWidgetSettings>> | null;
+  seoRichSnippetsEnabled: boolean | null;
+  plan: string | null;
+};
+
+/**
+ * Loads the public widget payload in one database round trip. The storefront
+ * endpoint used to issue separate review, question, settings, SEO and plan
+ * queries. That is especially expensive through a remote pooled database.
+ */
+export async function getProductReviewPublicBundle(
+  shopDomain: string,
+  productId: string,
+  productHandle = "",
+  productTitle = ""
+) {
+  const reviewMatches: Prisma.Sql[] = [];
+  const questionMatches: Prisma.Sql[] = [];
+  if (productId) {
+    reviewMatches.push(Prisma.sql`r."productId" = ${productId}`);
+    questionMatches.push(Prisma.sql`q."productId" = ${productId}`);
+  }
+  if (productHandle) {
+    reviewMatches.push(Prisma.sql`r."productHandle" = ${productHandle}`);
+    questionMatches.push(Prisma.sql`q."productHandle" = ${productHandle}`);
+  }
+  if (productTitle) {
+    reviewMatches.push(Prisma.sql`r."productTitle" = ${productTitle}`);
+    questionMatches.push(Prisma.sql`q."productTitle" = ${productTitle}`);
+  }
+
+  const reviewWhere = reviewMatches.length
+    ? Prisma.sql`(${Prisma.join(reviewMatches, " OR ")})`
+    : Prisma.sql`FALSE`;
+  const questionWhere = questionMatches.length
+    ? Prisma.sql`(${Prisma.join(questionMatches, " OR ")})`
+    : Prisma.sql`FALSE`;
+  const statuses = Prisma.join(publishedReviewStatuses);
+
+  const rows = await prisma.$queryRaw<PublicProductReviewBundleRow[]>(Prisma.sql`
+    SELECT
+      COALESCE((
+        SELECT jsonb_agg(to_jsonb(reviews_row) ORDER BY reviews_row."createdAt" DESC)
+        FROM (
+          SELECT r.*
+          FROM "ProductReview" r
+          WHERE r."shopDomain" = ${shopDomain}
+            AND r."status" IN (${statuses})
+            AND ${reviewWhere}
+          ORDER BY r."createdAt" DESC
+        ) reviews_row
+      ), '[]'::jsonb) AS reviews,
+      COALESCE((
+        SELECT jsonb_agg(to_jsonb(questions_row) ORDER BY questions_row."createdAt" DESC)
+        FROM (
+          SELECT q.*
+          FROM "ProductQuestion" q
+          WHERE q."shopDomain" = ${shopDomain}
+            AND q."status" = 'PUBLISHED'
+            AND ${questionWhere}
+          ORDER BY q."createdAt" DESC
+          LIMIT 25
+        ) questions_row
+      ), '[]'::jsonb) AS questions,
+      (SELECT to_jsonb(settings_row) FROM "ProductReviewSettings" settings_row WHERE settings_row."shopDomain" = ${shopDomain}) AS settings,
+      (SELECT seo."seoRichSnippetsEnabled" FROM "GoogleSeoSettings" seo WHERE seo."shopDomain" = ${shopDomain}) AS "seoRichSnippetsEnabled",
+      (SELECT subscription."plan" FROM "SubscriptionSettings" subscription WHERE subscription."shopDomain" = ${shopDomain}) AS plan
+  `);
+
+  const row = rows[0] || {
+    reviews: [],
+    questions: [],
+    settings: null,
+    seoRichSnippetsEnabled: false,
+    plan: null
+  };
+  const reviews = Array.isArray(row.reviews) ? row.reviews : [];
+  const questions = Array.isArray(row.questions) ? row.questions : [];
+  const ratingTotal = reviews.reduce((total, review) => total + Number(review.rating || 0), 0);
+
+  return {
+    summary: {
+      averageRating: Number((reviews.length ? ratingTotal / reviews.length : 0).toFixed(1)),
+      reviewCount: reviews.length,
+      reviews: reviews.map(publicProductReview),
+      questions
+    },
+    settings: row.settings,
+    seoRichSnippetsEnabled: Boolean(row.seoRichSnippetsEnabled),
+    plan: row.plan
+  };
+}
+
 export async function getProductReviewRatingSummary(
   shopDomain: string,
   productId: string,
