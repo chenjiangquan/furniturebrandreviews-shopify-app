@@ -9,3 +9,4 @@ coverage
 prisma/*.db
 prisma/*.db-journal
 prisma/dev.sqlite
+.env*.local
