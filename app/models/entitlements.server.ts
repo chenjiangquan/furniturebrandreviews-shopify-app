@@ -15,6 +15,7 @@ export type ShopEntitlements = {
 };
 
 const BILLING_STATUS_CACHE_TTL_MS = 60_000;
+const FREE_BILLING_STATUS_CACHE_TTL_MS = 5_000;
 const ENTITLEMENTS_CACHE_TTL_MS = 15_000;
 const MAX_ENTITLEMENTS_CACHE_ENTRIES = 500;
 const billingStatusSyncs = new Map<string, Promise<ShopEntitlements>>();
@@ -51,9 +52,12 @@ export async function syncAdminEntitlements(shopDomain: string, billing: any): P
   }
 
   const persisted = await getPersistedShopEntitlements(shopDomain);
+  const billingStatusCacheTtl = persisted.entitlements.isPro
+    ? BILLING_STATUS_CACHE_TTL_MS
+    : FREE_BILLING_STATUS_CACHE_TTL_MS;
   if (
     persisted.checkedAt &&
-    Date.now() - persisted.checkedAt.getTime() < BILLING_STATUS_CACHE_TTL_MS
+    Date.now() - persisted.checkedAt.getTime() < billingStatusCacheTtl
   ) {
     return persisted.entitlements;
   }
@@ -154,6 +158,10 @@ async function readPersistedShopEntitlements(shopDomain: string) {
 export function invalidateShopEntitlementsCache(shopDomain: string) {
   persistedEntitlementsCache.delete(shopDomain);
   persistedEntitlementsReads.delete(shopDomain);
+}
+
+export async function persistWebhookEntitlements(shopDomain: string, plan: AppPlan) {
+  await persistPlan(shopDomain, plan);
 }
 
 export async function getMonthlyPlanUsage(shopDomain: string, now = new Date()) {

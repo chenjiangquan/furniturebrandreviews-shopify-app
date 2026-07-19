@@ -47,20 +47,21 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<Dashboard
   try {
     const { billing, session } = await authenticate.admin(request);
     const shopDomain = session.shop;
-    return cachedAdminLoader(adminLoaderCacheKey(shopDomain, "dashboard"), async () => {
-      const [{ totalReviews }, billingStatus] = await Promise.all([
-        getDashboardReviewStats(shopDomain),
-        syncAdminEntitlements(shopDomain, billing)
-      ]);
+    const [billingStatus, { totalReviews }] = await Promise.all([
+      syncAdminEntitlements(shopDomain, billing),
+      cachedAdminLoader(
+        adminLoaderCacheKey(shopDomain, "dashboard-stats"),
+        () => getDashboardReviewStats(shopDomain)
+      )
+    ]);
 
-      return {
-        totalReviews,
-        brandWidgetStatus: "Active",
-        plan: billingStatus.plan,
-        planSource: billingStatus.planSource,
-        subscriptionId: ""
-      };
-    });
+    return {
+      totalReviews,
+      brandWidgetStatus: "Active",
+      plan: billingStatus.plan,
+      planSource: billingStatus.planSource,
+      subscriptionId: ""
+    };
   } catch (error) {
     if (error instanceof Response) {
       throw error;
