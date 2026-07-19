@@ -47,8 +47,9 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<Dashboard
   try {
     const { billing, session } = await authenticate.admin(request);
     const shopDomain = session.shop;
+    const planHandle = new URL(request.url).searchParams.get("plan_handle");
     const [billingStatus, { totalReviews }] = await Promise.all([
-      syncAdminEntitlements(shopDomain, billing),
+      syncAdminEntitlements(shopDomain, billing, session, planHandle),
       cachedAdminLoader(
         adminLoaderCacheKey(shopDomain, "dashboard-stats"),
         () => getDashboardReviewStats(shopDomain)

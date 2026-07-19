@@ -43,11 +43,22 @@ export class PlanLimitError extends Error {
   }
 }
 
-export async function syncAdminEntitlements(shopDomain: string, billing: any): Promise<ShopEntitlements> {
+export async function syncAdminEntitlements(
+  shopDomain: string,
+  billing: any,
+  session?: { accessToken?: string },
+  planHandle?: string | null
+): Promise<ShopEntitlements> {
   if (isFreeProShop(shopDomain)) {
     const persisted = await getPersistedShopEntitlements(shopDomain);
     if (persisted.entitlements.plan !== "PRO") await persistPlan(shopDomain, "PRO");
     return { plan: "PRO", planSource: "FREE_PARTNER", isPro: true };
+  }
+
+  const redirectedPlan = planFromShopifyPlanHandle(planHandle);
+  if (redirectedPlan) {
+    await persistPlan(shopDomain, redirectedPlan);
+    return entitlementsForPlan(redirectedPlan);
   }
 
   const persisted = await getPersistedShopEntitlements(shopDomain);
@@ -64,7 +75,7 @@ export async function syncAdminEntitlements(shopDomain: string, billing: any): P
   const existingSync = billingStatusSyncs.get(shopDomain);
   if (existingSync) return existingSync;
 
-  const sync = syncBillingStatus(shopDomain, billing, persisted.entitlements);
+  const sync = syncBillingStatus(shopDomain, billing, session, persisted.entitlements);
   billingStatusSyncs.set(shopDomain, sync);
   try {
     return await sync;
@@ -76,22 +87,23 @@ export async function syncAdminEntitlements(shopDomain: string, billing: any): P
 async function syncBillingStatus(
   shopDomain: string,
   billing: any,
+  session: { accessToken?: string } | undefined,
   persistedEntitlements: ShopEntitlements
 ): Promise<ShopEntitlements> {
   try {
-    // Managed App Pricing can use a Shopify-generated subscription name rather
-    // than the display name from our local billing config. The app has one paid
-    // recurring tier, so any active subscription belongs to Pro. Omitting
-    // `isTest` also accepts valid development-store subscriptions.
+    const appPricingPlan = await checkShopifyAppPricing(shopDomain, session?.accessToken);
+    if (appPricingPlan) {
+      await persistPlan(shopDomain, appPricingPlan);
+      return entitlementsForPlan(appPricingPlan);
+    }
+
+    // Legacy subscriptions created through the Billing API continue to appear
+    // here. Native Shopify App Pricing subscriptions are checked above through
+    // the Partner API.
     const check = await billing.check();
     const plan: AppPlan = check.appSubscriptions.length > 0 ? "PRO" : "FREE";
     await persistPlan(shopDomain, plan);
-
-    return {
-      plan,
-      planSource: plan === "PRO" ? "BILLING" : "FREE",
-      isPro: plan === "PRO"
-    };
+    return entitlementsForPlan(plan);
   } catch (error) {
     // Shopify App Pricing can temporarily make the legacy Billing API status
     // unavailable. A billing lookup must never prevent a merchant from opening
@@ -105,6 +117,93 @@ async function syncBillingStatus(
     await persistPlan(shopDomain, persistedEntitlements.plan);
     return persistedEntitlements;
   }
+}
+
+function planFromShopifyPlanHandle(planHandle?: string | null): AppPlan | null {
+  const normalized = planHandle?.trim().toLowerCase();
+  if (!normalized) return null;
+  return normalized.includes("free") ? "FREE" : "PRO";
+}
+
+function entitlementsForPlan(plan: AppPlan): ShopEntitlements {
+  return {
+    plan,
+    planSource: plan === "PRO" ? "BILLING" : "FREE",
+    isPro: plan === "PRO"
+  };
+}
+
+async function checkShopifyAppPricing(
+  shopDomain: string,
+  accessToken?: string
+): Promise<AppPlan | null> {
+  const organizationId = process.env.SHOPIFY_PARTNER_ORGANIZATION_ID?.trim();
+  const partnerAccessToken = process.env.SHOPIFY_PARTNER_ACCESS_TOKEN?.trim();
+  const configuredAppId = process.env.SHOPIFY_PARTNER_APP_ID?.trim();
+  if (!organizationId || !partnerAccessToken || !configuredAppId || !accessToken) return null;
+
+  const shopResponse = await fetch(`https://${shopDomain}/admin/api/2025-10/shop.json`, {
+    headers: { "X-Shopify-Access-Token": accessToken }
+  });
+  if (!shopResponse.ok) {
+    throw new Error(`Unable to resolve Shopify shop ID (${shopResponse.status})`);
+  }
+
+  const shopPayload = await shopResponse.json() as { shop?: { id?: string | number } };
+  if (!shopPayload.shop?.id) throw new Error("Shopify shop ID is missing");
+
+  const appId = configuredAppId.startsWith("gid://")
+    ? configuredAppId
+    : `gid://shopify/App/${configuredAppId}`;
+  const shopId = `gid://shopify/Shop/${shopPayload.shop.id}`;
+  const response = await fetch(
+    `https://partners.shopify.com/${organizationId}/api/2026-07/graphql.json`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": partnerAccessToken
+      },
+      body: JSON.stringify({
+        query: `
+          query ActiveSubscription($appId: ID!, $shopId: ID!) {
+            activeSubscription(appId: $appId, shopId: $shopId) {
+              items {
+                handle
+                price {
+                  active
+                  ... on FlatRatePrice { amount }
+                }
+              }
+            }
+          }
+        `,
+        variables: { appId, shopId }
+      })
+    }
+  );
+  if (!response.ok) throw new Error(`Partner API subscription lookup failed (${response.status})`);
+
+  const payload = await response.json() as {
+    data?: {
+      activeSubscription?: {
+        items?: Array<{ handle?: string; price?: { active?: boolean; amount?: string | number } }>;
+      } | null;
+    };
+    errors?: Array<{ message?: string }>;
+  };
+  if (payload.errors?.length) {
+    throw new Error(payload.errors.map((error) => error.message || "Partner API error").join("; "));
+  }
+
+  const subscription = payload.data?.activeSubscription;
+  if (!subscription) return "FREE";
+
+  const isPaid = (subscription.items || []).some((item) => {
+    const amount = Number(item.price?.amount || 0);
+    return item.price?.active !== false && amount > 0;
+  });
+  return isPaid ? "PRO" : "FREE";
 }
 
 export async function getShopEntitlements(shopDomain: string): Promise<ShopEntitlements> {
