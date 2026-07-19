@@ -124,7 +124,7 @@ export async function sendAppOwnerReviewNotification(shopDomain: string, review:
 
 export async function sendAppOwnerImportNotification(
   shopDomain: string,
-  result: { importedCount: number; skippedCount: number }
+  result: { importedCount: number; skippedCount: number; limitSkippedCount?: number }
 ) {
   if (result.importedCount < 1) return;
 
@@ -144,7 +144,8 @@ export async function sendAppOwnerImportNotification(
           ["Store", shop.storeName || shop.shopDomain],
           ["Shop domain", shop.shopDomain],
           ["Reviews imported", String(result.importedCount)],
-          ["Duplicates or invalid rows skipped", String(result.skippedCount)],
+          ["Duplicate reviews skipped", String(result.skippedCount)],
+          ["Reviews skipped due to plan limit", String(result.limitSkippedCount || 0)],
           ["Imported at", formatEmailDate(new Date())]
         ])
       })

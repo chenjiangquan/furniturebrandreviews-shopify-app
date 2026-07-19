@@ -862,7 +862,15 @@ function ImportReviewsModal({ open, onClose }: { open: boolean; onClose: () => v
     if (fetcher.state === "idle" && fetcher.data?.ok && file) {
       const importedCount = "importedCount" in fetcher.data ? Number(fetcher.data.importedCount || 0) : 0;
       const skippedCount = "skippedCount" in fetcher.data ? Number(fetcher.data.skippedCount || 0) : 0;
-      setSuccessMessage(`Import successful. ${importedCount} ${importedCount === 1 ? "review was" : "reviews were"} imported. ${skippedCount} duplicate ${skippedCount === 1 ? "review was" : "reviews were"} skipped.`);
+      const limitSkippedCount = "limitSkippedCount" in fetcher.data ? Number(fetcher.data.limitSkippedCount || 0) : 0;
+      const messages = [
+        `Import successful. ${importedCount} ${importedCount === 1 ? "review was" : "reviews were"} imported.`,
+        `${skippedCount} duplicate ${skippedCount === 1 ? "review was" : "reviews were"} skipped.`
+      ];
+      if (limitSkippedCount > 0) {
+        messages.push(`${limitSkippedCount} additional ${limitSkippedCount === 1 ? "review was" : "reviews were"} skipped because the Free plan monthly import limit was reached.`);
+      }
+      setSuccessMessage(messages.join(" "));
       setFile(null);
     }
   }, [fetcher.data, fetcher.state, file]);
@@ -1117,6 +1125,7 @@ async function importReviewsFromCsv(shopDomain: string, csvText: string, isPro: 
 
   let importedCount = 0;
   let skippedCount = 0;
+  let limitSkippedCount = 0;
   const preparedReviews: Array<{
     shopDomain: string;
     productId: string;
@@ -1182,7 +1191,7 @@ async function importReviewsFromCsv(shopDomain: string, csvText: string, isPro: 
   }
 
   if (!preparedReviews.length) {
-    return { importedCount, skippedCount };
+    return { importedCount, skippedCount, limitSkippedCount };
   }
 
   const existingReviews = await prisma.productReview.findMany({
@@ -1220,36 +1229,42 @@ async function importReviewsFromCsv(shopDomain: string, csvText: string, isPro: 
         update: {},
         create: { shopDomain, monthKey }
       });
-      const reserved = await tx.monthlyPlanUsage.updateMany({
-        where: {
-          shopDomain,
-          monthKey,
-          reviewImports: { lte: FREE_MONTHLY_IMPORT_LIMIT - reviewsToCreate.length }
-        },
-        data: { reviewImports: { increment: reviewsToCreate.length } }
-      });
-      if (!reserved.count) {
+      let reservedCount = 0;
+      for (let attempt = 0; attempt < 3 && reservedCount === 0; attempt += 1) {
         const usage = await tx.monthlyPlanUsage.findUnique({
           where: { shopDomain_monthKey: { shopDomain, monthKey } },
           select: { reviewImports: true }
         });
         const remaining = Math.max(0, FREE_MONTHLY_IMPORT_LIMIT - (usage?.reviewImports || 0));
-        throw new PlanLimitError(
-          `Free plan imports are limited to ${FREE_MONTHLY_IMPORT_LIMIT} reviews per month. This file has ${reviewsToCreate.length} new reviews, but only ${remaining} can still be imported this month. Upgrade to Pro for unlimited imports.`
-        );
+        const requestedCount = Math.min(reviewsToCreate.length, remaining);
+        if (requestedCount === 0) break;
+
+        const reserved = await tx.monthlyPlanUsage.updateMany({
+          where: {
+            shopDomain,
+            monthKey,
+            reviewImports: usage?.reviewImports || 0
+          },
+          data: { reviewImports: { increment: requestedCount } }
+        });
+        if (reserved.count) reservedCount = requestedCount;
       }
 
+      if (reservedCount === 0) return 0;
+
       let createdCount = 0;
-      for (let index = 0; index < reviewsToCreate.length; index += batchSize) {
-        const batch = reviewsToCreate.slice(index, index + batchSize);
+      const allowedReviews = reviewsToCreate.slice(0, reservedCount);
+      for (let index = 0; index < allowedReviews.length; index += batchSize) {
+        const batch = allowedReviews.slice(index, index + batchSize);
         const result = await tx.productReview.createMany({ data: batch });
         createdCount += result.count;
       }
       return createdCount;
     });
+    limitSkippedCount = Math.max(0, reviewsToCreate.length - importedCount);
   }
 
-  return { importedCount, skippedCount };
+  return { importedCount, skippedCount, limitSkippedCount };
 }
 
 type ImportedCsvRow = Record<string, string>;
