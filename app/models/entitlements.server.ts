@@ -75,7 +75,13 @@ export async function syncAdminEntitlements(
   const existingSync = billingStatusSyncs.get(shopDomain);
   if (existingSync) return existingSync;
 
-  const sync = syncBillingStatus(shopDomain, billing, session, persisted.entitlements);
+  const sync = syncBillingStatus(
+    shopDomain,
+    billing,
+    session,
+    persisted.entitlements,
+    persisted.shopifyShopId
+  );
   billingStatusSyncs.set(shopDomain, sync);
   try {
     return await sync;
@@ -88,10 +94,11 @@ async function syncBillingStatus(
   shopDomain: string,
   billing: any,
   session: { accessToken?: string } | undefined,
-  persistedEntitlements: ShopEntitlements
+  persistedEntitlements: ShopEntitlements,
+  persistedShopifyShopId: string | null
 ): Promise<ShopEntitlements> {
   try {
-    const appPricingPlan = await checkShopifyAppPricing(shopDomain, session?.accessToken);
+    const appPricingPlan = await checkShopifyAppPricing(shopDomain, persistedShopifyShopId);
     if (appPricingPlan) {
       await persistPlan(shopDomain, appPricingPlan);
       return entitlementsForPlan(appPricingPlan);
@@ -135,27 +142,22 @@ function entitlementsForPlan(plan: AppPlan): ShopEntitlements {
 
 async function checkShopifyAppPricing(
   shopDomain: string,
-  accessToken?: string
+  persistedShopifyShopId: string | null
 ): Promise<AppPlan | null> {
   const organizationId = process.env.SHOPIFY_PARTNER_ORGANIZATION_ID?.trim();
   const partnerAccessToken = process.env.SHOPIFY_PARTNER_ACCESS_TOKEN?.trim();
   const configuredAppId = process.env.SHOPIFY_PARTNER_APP_ID?.trim();
-  if (!organizationId || !partnerAccessToken || !configuredAppId || !accessToken) return null;
-
-  const shopResponse = await fetch(`https://${shopDomain}/admin/api/2025-10/shop.json`, {
-    headers: { "X-Shopify-Access-Token": accessToken }
-  });
-  if (!shopResponse.ok) {
-    throw new Error(`Unable to resolve Shopify shop ID (${shopResponse.status})`);
-  }
-
-  const shopPayload = await shopResponse.json() as { shop?: { id?: string | number } };
-  if (!shopPayload.shop?.id) throw new Error("Shopify shop ID is missing");
+  if (!organizationId || !partnerAccessToken || !configuredAppId) return null;
 
   const appId = configuredAppId.startsWith("gid://")
     ? configuredAppId
     : `gid://shopify/App/${configuredAppId}`;
-  const shopId = `gid://shopify/Shop/${shopPayload.shop.id}`;
+  const shopId = persistedShopifyShopId || await resolvePartnerShopId({
+    organizationId,
+    partnerAccessToken,
+    appId,
+    shopDomain
+  });
   const response = await fetch(
     `https://partners.shopify.com/${organizationId}/api/2026-07/graphql.json`,
     {
@@ -206,6 +208,114 @@ async function checkShopifyAppPricing(
   return isPaid ? "PRO" : "FREE";
 }
 
+async function resolvePartnerShopId({
+  organizationId,
+  partnerAccessToken,
+  appId,
+  shopDomain
+}: {
+  organizationId: string;
+  partnerAccessToken: string;
+  appId: string;
+  shopDomain: string;
+}) {
+  const endpoint = `https://partners.shopify.com/${organizationId}/api/2026-07/graphql.json`;
+  const normalizedDomain = normalizeShopDomain(shopDomain);
+  const occurredAtMax = new Date().toISOString();
+  const occurredAtMin = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+  let after: string | null = null;
+
+  // Partner events are the authoritative way to map a myshopify domain to its
+  // Shop GID without relying on a potentially expired Admin API access token.
+  // Keep the scan bounded; newly installed and newly upgraded stores appear on
+  // the first page in normal operation.
+  for (let page = 0; page < 10; page += 1) {
+    const response: Response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": partnerAccessToken
+      },
+      body: JSON.stringify({
+        query: `
+          query ResolveShopId(
+            $appId: ID!
+            $after: String
+            $occurredAtMin: DateTime!
+            $occurredAtMax: DateTime!
+          ) {
+            events(
+              first: 100
+              after: $after
+              filter: {
+                subjectId: $appId
+                subjectType: APP
+                occurredAtMin: $occurredAtMin
+                occurredAtMax: $occurredAtMax
+              }
+            ) {
+              edges {
+                node {
+                  shop { id myshopifyDomain }
+                }
+              }
+              pageInfo { hasNextPage endCursor }
+            }
+          }
+        `,
+        variables: { appId, after, occurredAtMin, occurredAtMax }
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`Partner API shop lookup failed (${response.status})`);
+    }
+
+    const payload = await response.json() as {
+      data?: {
+        events?: {
+          edges?: Array<{ node?: { shop?: { id?: string; myshopifyDomain?: string } | null } }>;
+          pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+        };
+      };
+      errors?: Array<{ message?: string }>;
+    };
+    if (payload.errors?.length) {
+      throw new Error(payload.errors.map((error) => error.message || "Partner API error").join("; "));
+    }
+
+    const events = payload.data?.events;
+    const matchingShop = events?.edges?.find(({ node }) =>
+      normalizeShopDomain(node?.shop?.myshopifyDomain || "") === normalizedDomain
+    )?.node?.shop;
+    if (matchingShop?.id) {
+      await persistShopifyShopId(shopDomain, matchingShop.id);
+      return matchingShop.id;
+    }
+
+    if (!events?.pageInfo?.hasNextPage || !events.pageInfo.endCursor) break;
+    after = events.pageInfo.endCursor;
+  }
+
+  throw new Error(`Unable to resolve Shopify shop ID for ${normalizedDomain}`);
+}
+
+function normalizeShopDomain(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/$/, "");
+}
+
+async function persistShopifyShopId(shopDomain: string, shopifyShopId: string) {
+  await prisma.shop.upsert({ where: { shopDomain }, update: {}, create: { shopDomain } });
+  await prisma.subscriptionSettings.upsert({
+    where: { shopDomain },
+    update: { shopifyShopId },
+    create: { shopDomain, shopifyShopId }
+  });
+}
+
 export async function getShopEntitlements(shopDomain: string): Promise<ShopEntitlements> {
   if (isFreeProShop(shopDomain)) {
     return { plan: "PRO", planSource: "FREE_PARTNER", isPro: true };
@@ -243,7 +353,7 @@ async function getPersistedShopEntitlements(shopDomain: string) {
 async function readPersistedShopEntitlements(shopDomain: string) {
   const subscription = await prisma.subscriptionSettings.findUnique({
     where: { shopDomain },
-    select: { plan: true, updatedAt: true }
+    select: { plan: true, shopifyShopId: true, updatedAt: true }
   });
   const plan: AppPlan = subscription?.plan === "PRO" ? "PRO" : "FREE";
 
@@ -253,6 +363,7 @@ async function readPersistedShopEntitlements(shopDomain: string) {
       planSource: plan === "PRO" ? "BILLING" as const : "FREE" as const,
       isPro: plan === "PRO"
     },
+    shopifyShopId: subscription?.shopifyShopId || null,
     checkedAt: subscription?.updatedAt || null
   };
 }

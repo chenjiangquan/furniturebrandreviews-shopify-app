@@ -262,11 +262,12 @@ model GoogleSeoSettings {
 }
 
 model SubscriptionSettings {
-  id         String   @id @default(cuid())
-  shopDomain String   @unique
-  plan       String   @default("FREE")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id            String   @id @default(cuid())
+  shopDomain    String   @unique
+  shopifyShopId String?
+  plan          String   @default("FREE")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
 }
