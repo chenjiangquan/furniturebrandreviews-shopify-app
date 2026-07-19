@@ -1,5 +1,4 @@
 import prisma from "~/db.server";
-import { PRO_PLAN } from "~/models/billing-plans";
 import { isFreeProShop } from "~/shopify.server";
 
 export const FREE_MONTHLY_IMPORT_LIMIT = 30;
@@ -80,13 +79,12 @@ async function syncBillingStatus(
   persistedEntitlements: ShopEntitlements
 ): Promise<ShopEntitlements> {
   try {
-    // Shopify marks managed-pricing subscriptions on development stores as
-    // test subscriptions even when the merchant has selected the active Pro
-    // plan. `isTest: false` excludes those subscriptions and incorrectly
-    // downgrades the shop to Free. Omitting the flag uses Shopify's default,
-    // which accepts both active live and active test subscriptions.
-    const check = await billing.check({ plans: [PRO_PLAN] });
-    const plan: AppPlan = check.hasActivePayment ? "PRO" : "FREE";
+    // Managed App Pricing can use a Shopify-generated subscription name rather
+    // than the display name from our local billing config. The app has one paid
+    // recurring tier, so any active subscription belongs to Pro. Omitting
+    // `isTest` also accepts valid development-store subscriptions.
+    const check = await billing.check();
+    const plan: AppPlan = check.appSubscriptions.length > 0 ? "PRO" : "FREE";
     await persistPlan(shopDomain, plan);
 
     return {
