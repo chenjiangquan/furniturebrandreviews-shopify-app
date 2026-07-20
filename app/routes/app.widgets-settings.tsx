@@ -44,14 +44,18 @@ const productReviewWidgets = [
     title: "Review Widget",
     description: "Collect and display product reviews on your product pages.",
     image: "/widget-previews/review-widget.jpg",
-    customizeUrl: "/app/widgets/review-widget"
+    customizeUrl: "/app/widgets/review-widget",
+    blockHandle: "product-reviews-widget",
+    installTarget: "newAppsSection"
   },
   {
     key: "starRating",
     title: "Star Rating Badge",
     description: "Show the average rating of your products and how many reviews they've received.",
     image: "/widget-previews/star-rating-badge.jpg",
-    customizeUrl: "/app/widgets/star-rating-badge"
+    customizeUrl: "/app/widgets/star-rating-badge",
+    blockHandle: "product-star-rating",
+    installTarget: "mainSection"
   }
 ];
 
@@ -139,7 +143,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     entitlements = await getShopEntitlements(shopDomain);
   }
 
-  const productThemeEditorUrl = `https://${session.shop}/admin/themes/current/editor?template=product`;
+  const shopifyApiKey = process.env.SHOPIFY_API_KEY || "db5beafee602d16825792984fa641886";
+  const productWidgetInstallUrls = Object.fromEntries(
+    productReviewWidgets.map((widget) => [
+      widget.key,
+      buildThemeAppBlockInstallUrl({
+        shopDomain: session.shop,
+        apiKey: shopifyApiKey,
+        template: "product",
+        blockHandle: widget.blockHandle,
+        target: widget.installTarget
+      })
+    ])
+  );
   const homeThemeEditorUrl = `https://${session.shop}/admin/themes/current/editor?template=index`;
   const productLiquidUrl = `https://${session.shop}/admin/themes/current?key=templates/product.liquid`;
   const appUrl = (process.env.SHOPIFY_APP_URL || "https://app.furniturebrandreviews.com").replace(/\/$/, "");
@@ -153,7 +169,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     entitlements,
     googleSeoInstalled,
-    productThemeEditorUrl,
+    productWidgetInstallUrls,
     homeThemeEditorUrl,
     productLiquidUrl,
     brandProfile: {
@@ -264,7 +280,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function WidgetsSettings() {
-  const { entitlements, googleSeoInstalled, productThemeEditorUrl, homeThemeEditorUrl, productLiquidUrl, brandProfile, notificationSettings, upgradeUrl, appUrl } = useLoaderData<typeof loader>();
+  const { entitlements, googleSeoInstalled, productWidgetInstallUrls, homeThemeEditorUrl, productLiquidUrl, brandProfile, notificationSettings, upgradeUrl, appUrl } = useLoaderData<typeof loader>();
   const brandFetcher = useFetcher<typeof action>();
   const notificationFetcher = useFetcher<typeof action>();
   const navigate = useNavigate();
@@ -303,7 +319,7 @@ export default function WidgetsSettings() {
             return (
               <WidgetCard key={widget.title} title={widget.title} description={widget.description} image={widget.image}>
                 <ButtonGroup>
-                  <Button url={productThemeEditorUrl} target="_blank">Install</Button>
+                  <Button url={productWidgetInstallUrls[widget.key]} target="_blank">Install</Button>
                   <Button onClick={() => setManualWidget({
                     title: widget.title,
                     code: buildProductManualInstallCode(appUrl, widget.key),
@@ -704,6 +720,27 @@ function buildProductManualInstallCode(appUrl: string, widgetKey: string) {
   data-product-title="{{ product.title | escape }}"
 ></div>
 <!-- End Furniture Brand Reviews ${label} code -->`;
+}
+
+function buildThemeAppBlockInstallUrl({
+  shopDomain,
+  apiKey,
+  template,
+  blockHandle,
+  target
+}: {
+  shopDomain: string;
+  apiKey: string;
+  template: string;
+  blockHandle: string;
+  target: string;
+}) {
+  const params = new URLSearchParams({
+    template,
+    addAppBlockId: `${apiKey}/${blockHandle}`,
+    target
+  });
+  return `https://${shopDomain}/admin/themes/current/editor?${params.toString()}`;
 }
 
 function buildBrandManualInstallCode(layout: BrandTrustWidget["layout"], brandSlug: string) {
