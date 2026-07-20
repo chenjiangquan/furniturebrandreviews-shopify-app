@@ -46,6 +46,8 @@ type ManualInstallWidget = {
   title: string;
   code: string;
   kind: "productReview" | "starRating" | "brandTrust";
+  editorUrl?: string;
+  compatibilityUnknown?: boolean;
 };
 
 const productReviewWidgets = [
@@ -364,11 +366,20 @@ export default function WidgetsSettings() {
               code: buildProductManualInstallCode(appUrl, widget.key),
               kind: widget.key === "starRating" ? "starRating" : "productReview"
             });
+            const openUnknownInstall = () => setManualWidget({
+              title: widget.title,
+              code: buildProductManualInstallCode(appUrl, widget.key),
+              kind: widget.key === "starRating" ? "starRating" : "productReview",
+              editorUrl: productWidgetInstallUrls[widget.key],
+              compatibilityUnknown: true
+            });
             return (
               <WidgetCard key={widget.title} title={widget.title} description={widget.description} image={widget.image}>
                 <ButtonGroup>
                   {themeCompatibility.product === "json" ? (
                     <Button url={productWidgetInstallUrls[widget.key]} target="_blank">Install</Button>
+                  ) : themeCompatibility.product === "unknown" ? (
+                    <Button onClick={openUnknownInstall}>Install</Button>
                   ) : (
                     <Button onClick={openManualInstall}>Install</Button>
                   )}
@@ -509,6 +520,13 @@ export default function WidgetsSettings() {
               code: buildBrandManualInstallCode(widget.layout, brandSlug),
               kind: "brandTrust"
             });
+            const openUnknownInstall = () => setManualWidget({
+              title: widget.title,
+              code: buildBrandManualInstallCode(widget.layout, brandSlug),
+              kind: "brandTrust",
+              editorUrl: brandWidgetInstallUrls[widget.key],
+              compatibilityUnknown: true
+            });
             return (
             <WidgetCard
               key={widget.title}
@@ -521,6 +539,8 @@ export default function WidgetsSettings() {
               <ButtonGroup>
                 {themeCompatibility.index === "json" ? (
                   <Button url={brandWidgetInstallUrls[widget.key]} target="_blank" disabled={!canInstall}>Install</Button>
+                ) : themeCompatibility.index === "unknown" ? (
+                  <Button onClick={openUnknownInstall} disabled={!canInstall}>Install</Button>
                 ) : (
                   <Button onClick={openManualInstall} disabled={!canInstall}>Install</Button>
                 )}
@@ -635,6 +655,10 @@ function BrandWidgetInstallInstructions({ templateType }: { templateType: ThemeT
         <Text as="p" tone="subdued">
           <strong>Online Store 2.0 / JSON theme:</strong> click <strong>Install</strong> to preview this widget in a new Apps section, then choose its position and save.
         </Text>
+      ) : templateType === "unknown" ? (
+        <Text as="p" tone="subdued">
+          <strong>Theme type not confirmed:</strong> click <strong>Install</strong> to try the Theme Editor. If the widget is unavailable there, use the manual code instead.
+        </Text>
       ) : (
         <Text as="p" tone="subdued">
           <strong>Legacy Liquid theme:</strong> Shopify does not list app blocks or app sections in this theme. Click <strong>Install</strong> to open the manual code and paste it into a Custom Liquid/HTML section or theme file.
@@ -659,7 +683,7 @@ function LegacyThemeBanner({
       <Text as="p">
         {detectedType === "liquid"
           ? `${themeName} uses ${templateFilename}. Shopify app blocks are unavailable on this template, so Install will open the manual installation code.`
-          : "Install will open the safe manual installation instructions because the published theme template could not be checked."}
+          : "The published theme template could not be checked. Install will let you try the Theme Editor and also provides a manual fallback."}
       </Text>
     </Banner>
   );
@@ -686,7 +710,7 @@ function ManualInstallModal({
     <Modal
       open={Boolean(widget)}
       onClose={onClose}
-      title={widget ? `Manual install: ${widget.title}` : "Manual install"}
+      title={widget ? `${widget.compatibilityUnknown ? "Install options" : "Manual install"}: ${widget.title}` : "Manual install"}
       primaryAction={{
         content: copied ? "Copied" : "Copy code",
         onAction: async () => {
@@ -698,6 +722,18 @@ function ManualInstallModal({
     >
       <Modal.Section>
         <BlockStack gap="400">
+          {widget?.compatibilityUnknown && widget.editorUrl ? (
+            <Banner title="Try the Theme Editor first" tone="info">
+              <BlockStack gap="300">
+                <Text as="p">
+                  This store may support the app block even though its theme type could not be confirmed. Open the Theme Editor and add the widget there. If Shopify says the template does not support app blocks, use the manual code below.
+                </Text>
+                <InlineStack align="start">
+                  <Button url={widget.editorUrl} target="_blank" variant="primary">Open Theme Editor</Button>
+                </InlineStack>
+              </BlockStack>
+            </Banner>
+          ) : null}
           {isProductWidget ? (
             <BlockStack gap="300">
               <Text as="p" variant="headingSm">Add the widget code</Text>
