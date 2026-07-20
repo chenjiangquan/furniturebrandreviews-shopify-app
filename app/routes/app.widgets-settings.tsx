@@ -833,15 +833,16 @@ async function detectThemeCompatibility(admin: {
       themes(first: 5, roles: [MAIN]) {
         nodes {
           name
-          files(
-            first: 10
-            filenames: [
-              "templates/product.json"
-              "templates/product.liquid"
-              "templates/index.json"
-              "templates/index.liquid"
-            ]
-          ) {
+          productJson: files(first: 1, filenames: ["templates/product.json"]) {
+            nodes { filename }
+          }
+          productLiquid: files(first: 1, filenames: ["templates/product.liquid"]) {
+            nodes { filename }
+          }
+          indexJson: files(first: 1, filenames: ["templates/index.json"]) {
+            nodes { filename }
+          }
+          indexLiquid: files(first: 1, filenames: ["templates/index.liquid"]) {
             nodes { filename }
           }
         }
@@ -853,7 +854,13 @@ async function detectThemeCompatibility(admin: {
   const payload = await response.json() as {
     data?: {
       themes?: {
-        nodes?: Array<{ name?: string; files?: { nodes?: Array<{ filename?: string }> } | null }>;
+        nodes?: Array<{
+          name?: string;
+          productJson?: { nodes?: Array<{ filename?: string }> } | null;
+          productLiquid?: { nodes?: Array<{ filename?: string }> } | null;
+          indexJson?: { nodes?: Array<{ filename?: string }> } | null;
+          indexLiquid?: { nodes?: Array<{ filename?: string }> } | null;
+        }>;
       };
     };
     errors?: Array<{ message?: string }>;
@@ -863,7 +870,12 @@ async function detectThemeCompatibility(admin: {
   }
 
   const theme = payload.data?.themes?.nodes?.[0];
-  const filenames = new Set((theme?.files?.nodes || []).map((file) => file.filename).filter(Boolean));
+  const filenames = new Set([
+    ...(theme?.productJson?.nodes || []),
+    ...(theme?.productLiquid?.nodes || []),
+    ...(theme?.indexJson?.nodes || []),
+    ...(theme?.indexLiquid?.nodes || [])
+  ].map((file) => file.filename).filter(Boolean));
   return {
     themeName: theme?.name || "Published theme",
     product: templateTypeFromFilenames(filenames, "product"),
