@@ -34,12 +34,20 @@ type BrandTrustWidget = {
   installTarget: string;
 };
 
-type ThemeTemplateType = "json" | "liquid" | "unknown";
+type InstallWidgetKey = "reviewWidget" | "starRating" | BrandTrustWidget["key"];
+type ThemeInstallStatus = "ready" | "needs_apps_wrapper" | "manual" | "unknown";
 
-type ThemeCompatibility = {
+type ThemeInstallCheckResponse = {
+  ok: boolean;
+  id: string;
+  intent: "checkThemeInstall";
+  widgetKey: InstallWidgetKey;
+  status: ThemeInstallStatus;
   themeName: string;
-  product: ThemeTemplateType;
-  index: ThemeTemplateType;
+  codeEditorUrl: string;
+  error: string;
+  message: string;
+  brandProfile: null;
 };
 
 type ManualInstallWidget = {
@@ -48,6 +56,12 @@ type ManualInstallWidget = {
   kind: "productReview" | "starRating" | "brandTrust";
   editorUrl?: string;
   compatibilityUnknown?: boolean;
+};
+
+type AppsWrapperTutorial = {
+  title: string;
+  widgetKey: InstallWidgetKey;
+  codeEditorUrl: string;
 };
 
 const productReviewWidgets = [
@@ -100,21 +114,34 @@ const defaultBrandProfile = {
 
 const WHATSAPP_SUPPORT_URL = "https://wa.me/447521530350";
 const CLAIM_PROFILE_URL = "https://www.furniturebrandreviews.com/claim-your-profile";
+const APPS_WRAPPER_CODE = `<div class="fbr-apps-section">
+  {% for block in section.blocks %}
+    {% render block %}
+  {% endfor %}
+</div>
+
+{% schema %}
+{
+  "name": "Apps",
+  "tag": "section",
+  "class": "shopify-section--apps",
+  "settings": [],
+  "blocks": [
+    {
+      "type": "@app"
+    }
+  ],
+  "presets": [
+    {
+      "name": "Apps"
+    }
+  ]
+}
+{% endschema %}`;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
-  const themeCompatibilityPromise = cachedAdminLoader(
-    adminLoaderCacheKey(shopDomain, "theme-compatibility"),
-    () => detectThemeCompatibility(admin),
-    5 * 60_000
-  ).catch((error) => {
-    console.warn("Unable to detect published theme compatibility", {
-      shopDomain,
-      error: error instanceof Error ? error.message : String(error)
-    });
-    return { themeName: "Published theme", product: "unknown", index: "unknown" } as ThemeCompatibility;
-  });
   let entitlements: Awaited<ReturnType<typeof getShopEntitlements>>;
   let widgetSettings = {
     brandName: defaultBrandProfile.brandName,
@@ -203,12 +230,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     googleSeoSettings.reviewsSiteEnabled &&
     googleSeoSettings.seoRichSnippetsEnabled &&
     googleSeoSettings.googleShoppingEnabled;
-  const themeCompatibility = await themeCompatibilityPromise;
-
   return {
     entitlements,
     googleSeoInstalled,
-    themeCompatibility,
     productWidgetInstallUrls,
     brandWidgetInstallUrls,
     productLiquidUrl,
@@ -229,10 +253,50 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   invalidateAdminLoaderCache(session.shop);
   const form = await request.formData();
   const intent = String(form.get("intent") || "");
+
+  if (intent === "checkThemeInstall") {
+    const widgetKey = String(form.get("widgetKey") || "") as InstallWidgetKey;
+    if (!isInstallWidgetKey(widgetKey)) {
+      return {
+        ok: false,
+        id: "",
+        intent: "checkThemeInstall" as const,
+        widgetKey,
+        status: "unknown" as const,
+        themeName: "Published theme",
+        codeEditorUrl: "",
+        error: "Unknown widget.",
+        message: "",
+        brandProfile: null
+      };
+    }
+
+    try {
+      return await detectThemeInstallCapability(admin, session.shop, widgetKey);
+    } catch (error) {
+      console.warn("Unable to check theme compatibility during widget installation", {
+        shopDomain: session.shop,
+        widgetKey,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return {
+        ok: false,
+        id: "",
+        intent: "checkThemeInstall" as const,
+        widgetKey,
+        status: "unknown" as const,
+        themeName: "Published theme",
+        codeEditorUrl: "",
+        error: "The current theme could not be checked.",
+        message: "",
+        brandProfile: null
+      };
+    }
+  }
 
   if (intent === "saveNotificationSettings" || intent === "sendTestEmail") {
     const notificationEmail = String(form.get("notificationEmail") || "").trim();
@@ -320,11 +384,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function WidgetsSettings() {
-  const { entitlements, googleSeoInstalled, themeCompatibility, productWidgetInstallUrls, brandWidgetInstallUrls, productLiquidUrl, brandProfile, notificationSettings, upgradeUrl, appUrl } = useLoaderData<typeof loader>();
+  const { entitlements, googleSeoInstalled, productWidgetInstallUrls, brandWidgetInstallUrls, productLiquidUrl, brandProfile, notificationSettings, upgradeUrl, appUrl } = useLoaderData<typeof loader>();
   const brandFetcher = useFetcher<typeof action>();
   const notificationFetcher = useFetcher<typeof action>();
+  const installFetcher = useFetcher<ThemeInstallCheckResponse>();
   const navigate = useNavigate();
   const [manualWidget, setManualWidget] = React.useState<ManualInstallWidget | null>(null);
+  const [appsWrapperTutorial, setAppsWrapperTutorial] = React.useState<AppsWrapperTutorial | null>(null);
+  const pendingInstallRef = React.useRef<{
+    widgetKey: InstallWidgetKey;
+    title: string;
+    editorUrl: string;
+    manualWidget: ManualInstallWidget;
+  } | null>(null);
+  const installWindowRef = React.useRef<Window | null>(null);
   const [brandName, setBrandName] = React.useState(brandProfile.brandName);
   const [notificationEmail, setNotificationEmail] = React.useState(notificationSettings.notificationEmail);
   const [reviewEmailNotificationsEnabled, setReviewEmailNotificationsEnabled] = React.useState(notificationSettings.reviewEmailNotificationsEnabled);
@@ -344,6 +417,60 @@ export default function WidgetsSettings() {
     setQuestionEmailNotificationsEnabled(saved.questionEmailNotificationsEnabled);
   }, [notificationFetcher.data]);
 
+  React.useEffect(() => {
+    const result = installFetcher.data;
+    const pendingInstall = pendingInstallRef.current;
+    if (!result || !pendingInstall || result.widgetKey !== pendingInstall.widgetKey) return;
+
+    if (result.status === "ready") {
+      setAppsWrapperTutorial(null);
+      if (installWindowRef.current && !installWindowRef.current.closed) {
+        installWindowRef.current.location.href = pendingInstall.editorUrl;
+      } else {
+        openTopLevel(pendingInstall.editorUrl);
+      }
+      installWindowRef.current = null;
+      pendingInstallRef.current = null;
+      return;
+    }
+
+    if (result.status === "needs_apps_wrapper") {
+      installWindowRef.current?.close();
+      installWindowRef.current = null;
+      setAppsWrapperTutorial({
+        title: pendingInstall.title,
+        widgetKey: pendingInstall.widgetKey,
+        codeEditorUrl: result.codeEditorUrl
+      });
+      return;
+    }
+
+    installWindowRef.current?.close();
+    installWindowRef.current = null;
+    setAppsWrapperTutorial(null);
+    setManualWidget({
+      ...pendingInstall.manualWidget,
+      editorUrl: result.status === "unknown" ? pendingInstall.editorUrl : undefined,
+      compatibilityUnknown: result.status === "unknown"
+    });
+    pendingInstallRef.current = null;
+  }, [installFetcher.data]);
+
+  const checkThenInstall = React.useCallback((installation: {
+    widgetKey: InstallWidgetKey;
+    title: string;
+    editorUrl: string;
+    manualWidget: ManualInstallWidget;
+  }) => {
+    installWindowRef.current?.close();
+    installWindowRef.current = window.open("about:blank", "_blank");
+    pendingInstallRef.current = installation;
+    installFetcher.submit(
+      { intent: "checkThemeInstall", widgetKey: installation.widgetKey },
+      { method: "post" }
+    );
+  }, [installFetcher]);
+
   return (
     <Page
       fullWidth
@@ -355,34 +482,27 @@ export default function WidgetsSettings() {
       {entitlements.isPro ? <RemixLink to="/app/google-seo" prefetch="render" aria-hidden tabIndex={-1} style={{ display: "none" }} /> : null}
       <BlockStack gap="500">
         <WidgetSection title="Product Review Widgets">
-          {themeCompatibility.product !== "json" ? (
-            <div style={{ gridColumn: "1 / -1" }}>
-              <LegacyThemeBanner themeName={themeCompatibility.themeName} template="product" detectedType={themeCompatibility.product} />
-            </div>
-          ) : null}
           {productReviewWidgets.map((widget) => {
-            const openManualInstall = () => setManualWidget({
+            const manualInstallation: ManualInstallWidget = {
               title: widget.title,
               code: buildProductManualInstallCode(appUrl, widget.key),
               kind: widget.key === "starRating" ? "starRating" : "productReview"
-            });
-            const openUnknownInstall = () => setManualWidget({
-              title: widget.title,
-              code: buildProductManualInstallCode(appUrl, widget.key),
-              kind: widget.key === "starRating" ? "starRating" : "productReview",
-              editorUrl: productWidgetInstallUrls[widget.key],
-              compatibilityUnknown: true
-            });
+            };
+            const openManualInstall = () => setManualWidget(manualInstallation);
             return (
               <WidgetCard key={widget.title} title={widget.title} description={widget.description} image={widget.image}>
                 <ButtonGroup>
-                  {themeCompatibility.product === "json" ? (
-                    <Button url={productWidgetInstallUrls[widget.key]} target="_blank">Install</Button>
-                  ) : themeCompatibility.product === "unknown" ? (
-                    <Button onClick={openUnknownInstall}>Install</Button>
-                  ) : (
-                    <Button onClick={openManualInstall}>Install</Button>
-                  )}
+                  <Button
+                    onClick={() => checkThenInstall({
+                      widgetKey: widget.key as InstallWidgetKey,
+                      title: widget.title,
+                      editorUrl: productWidgetInstallUrls[widget.key],
+                      manualWidget: manualInstallation
+                    })}
+                    loading={installFetcher.state !== "idle" && pendingInstallRef.current?.widgetKey === widget.key}
+                  >
+                    Install
+                  </Button>
                   <Button onClick={openManualInstall}>
                     Manual install
                   </Button>
@@ -510,11 +630,12 @@ export default function WidgetsSettings() {
           </div>
           {brandTrustWidgets.map((widget) => {
             const canInstall = Boolean(brandSlug) && entitlements.isPro;
-            const openManualInstall = () => setManualWidget({
+            const manualInstallation: ManualInstallWidget = {
               title: widget.title,
               code: buildBrandManualInstallCode(widget.layout, brandSlug),
               kind: "brandTrust"
-            });
+            };
+            const openManualInstall = () => setManualWidget(manualInstallation);
             return (
             <WidgetCard
               key={widget.title}
@@ -525,7 +646,18 @@ export default function WidgetsSettings() {
             >
               {!canInstall ? <Text as="p" tone="critical">Enter your brand name before installing this widget.</Text> : null}
               <ButtonGroup>
-                <Button url={brandWidgetInstallUrls[widget.key]} target="_blank" disabled={!canInstall}>Install</Button>
+                <Button
+                  onClick={() => checkThenInstall({
+                    widgetKey: widget.key,
+                    title: widget.title,
+                    editorUrl: brandWidgetInstallUrls[widget.key],
+                    manualWidget: manualInstallation
+                  })}
+                  disabled={!canInstall}
+                  loading={installFetcher.state !== "idle" && pendingInstallRef.current?.widgetKey === widget.key}
+                >
+                  Install
+                </Button>
                 <Button
                   onClick={openManualInstall}
                   disabled={!canInstall}
@@ -557,6 +689,26 @@ export default function WidgetsSettings() {
           widget={manualWidget}
           productLiquidUrl={productLiquidUrl}
           onClose={() => setManualWidget(null)}
+        />
+        <AppsWrapperTutorialModal
+          tutorial={appsWrapperTutorial}
+          checking={installFetcher.state !== "idle"}
+          onCheckAgain={() => {
+            const pendingInstall = pendingInstallRef.current;
+            if (!pendingInstall) return;
+            installWindowRef.current?.close();
+            installWindowRef.current = window.open("about:blank", "_blank");
+            installFetcher.submit(
+              { intent: "checkThemeInstall", widgetKey: pendingInstall.widgetKey },
+              { method: "post" }
+            );
+          }}
+          onClose={() => {
+            installWindowRef.current?.close();
+            installWindowRef.current = null;
+            setAppsWrapperTutorial(null);
+            pendingInstallRef.current = null;
+          }}
         />
       </BlockStack>
     </Page>
@@ -635,35 +787,87 @@ function BrandWidgetInstallInstructions({ widgetKey }: { widgetKey: BrandTrustWi
     <BlockStack gap="100">
       {widgetKey === "brandCarousel" ? (
         <Text as="p" tone="subdued">
-          Click <strong>Install</strong> to add this widget as an app section in the Theme Editor. Compatible Liquid themes can also support this; if Shopify does not list it, use <strong>Manual install</strong>.
+          Click <strong>Install</strong> to add this widget as an app section in the Theme Editor, or choose <strong>Manual install</strong> to place the code yourself.
         </Text>
       ) : (
         <Text as="p" tone="subdued">
-          Click <strong>Install</strong> to open the Theme Editor, then add this badge inside a section that supports app blocks, such as a compatible footer. If the target section does not accept app blocks, use <strong>Manual install</strong>.
+          Click <strong>Install</strong> to add this badge in the Theme Editor, or choose <strong>Manual install</strong> to place the code yourself.
         </Text>
       )}
     </BlockStack>
   );
 }
 
-function LegacyThemeBanner({
-  themeName,
-  template,
-  detectedType
+function AppsWrapperTutorialModal({
+  tutorial,
+  checking,
+  onCheckAgain,
+  onClose
 }: {
-  themeName: string;
-  template: "product" | "index";
-  detectedType: ThemeTemplateType;
+  tutorial: AppsWrapperTutorial | null;
+  checking: boolean;
+  onCheckAgain: () => void;
+  onClose: () => void;
 }) {
-  const templateFilename = `templates/${template}.${detectedType === "liquid" ? "liquid" : "json"}`;
+  const [copied, setCopied] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!tutorial) setCopied(false);
+  }, [tutorial]);
+
   return (
-    <Banner title={detectedType === "liquid" ? "Legacy Liquid theme detected" : "Theme compatibility could not be confirmed"} tone="info">
-      <Text as="p">
-        {detectedType === "liquid"
-          ? `${themeName} uses ${templateFilename}. Shopify app blocks are unavailable on this template, so Install will open the manual installation code.`
-          : "The published theme template could not be checked. Install will let you try the Theme Editor and also provides a manual fallback."}
-      </Text>
-    </Banner>
+    <Modal
+      open={Boolean(tutorial)}
+      onClose={onClose}
+      title={tutorial ? `Enable app sections for ${tutorial.title}` : "Enable app sections"}
+      primaryAction={{
+        content: "I've saved it — check again",
+        onAction: onCheckAgain,
+        loading: checking
+      }}
+      secondaryActions={[{ content: "Close", onAction: onClose }]}
+    >
+      <Modal.Section>
+        <BlockStack gap="400">
+          <Banner title="One small theme file is required" tone="info">
+            <Text as="p">
+              This theme has a dynamic Liquid home page, but it does not yet include the Apps wrapper that lets Shopify place app sections on it. Add the file below, then continue the installation.
+            </Text>
+          </Banner>
+          <Box as="div" paddingInlineStart="400">
+            <ol style={{ margin: 0, paddingLeft: 18 }}>
+              <li>Click <strong>Copy apps.liquid code</strong>.</li>
+              <li>Open the current theme code editor.</li>
+              <li>Under <strong>Sections</strong>, create a new section named <strong>apps</strong>.</li>
+              <li>Replace its contents with the copied code and click <strong>Save</strong>.</li>
+              <li>Return here and click <strong>I've saved it — check again</strong>.</li>
+            </ol>
+          </Box>
+          <InlineStack gap="300" wrap>
+            <Button
+              variant="primary"
+              onClick={async () => {
+                await navigator.clipboard.writeText(APPS_WRAPPER_CODE);
+                setCopied(true);
+              }}
+            >
+              {copied ? "Code copied" : "Copy apps.liquid code"}
+            </Button>
+            {tutorial?.codeEditorUrl ? (
+              <Button url={tutorial.codeEditorUrl} target="_blank">Open theme code editor</Button>
+            ) : null}
+          </InlineStack>
+          <Box background="bg-surface-secondary" borderRadius="200" padding="300">
+            <pre style={{ margin: 0, maxHeight: 320, overflow: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+              <code>{APPS_WRAPPER_CODE}</code>
+            </pre>
+          </Box>
+          <Text as="p" tone="subdued">
+            This creates a standard Apps wrapper only. It does not replace or modify any existing theme file.
+          </Text>
+        </BlockStack>
+      </Modal.Section>
+    </Modal>
   );
 }
 
@@ -839,13 +1043,18 @@ function buildThemeAppBlockInstallUrl({
   return `https://${shopDomain}/admin/themes/current/editor?${params.toString()}`;
 }
 
-async function detectThemeCompatibility(admin: {
+function isInstallWidgetKey(value: string): value is InstallWidgetKey {
+  return ["reviewWidget", "starRating", "brandCarousel", "brandMicro"].includes(value);
+}
+
+async function detectThemeInstallCapability(admin: {
   graphql: (query: string) => Promise<Response>;
-}): Promise<ThemeCompatibility> {
+}, shopDomain: string, widgetKey: InstallWidgetKey): Promise<ThemeInstallCheckResponse> {
   const response = await admin.graphql(`#graphql
-    query PublishedThemeCompatibility {
-      themes(first: 5, roles: [MAIN]) {
+    query CurrentThemeInstallCompatibility {
+      themes(first: 1, roles: [MAIN]) {
         nodes {
+          id
           name
           productJson: files(first: 1, filenames: ["templates/product.json"]) {
             nodes { filename }
@@ -857,6 +1066,14 @@ async function detectThemeCompatibility(admin: {
             nodes { filename }
           }
           indexLiquid: files(first: 1, filenames: ["templates/index.liquid"]) {
+            nodes {
+              filename
+              body {
+                ... on OnlineStoreThemeFileBodyText { content }
+              }
+            }
+          }
+          appsLiquid: files(first: 1, filenames: ["sections/apps.liquid"]) {
             nodes { filename }
           }
         }
@@ -869,11 +1086,16 @@ async function detectThemeCompatibility(admin: {
     data?: {
       themes?: {
         nodes?: Array<{
+          id?: string;
           name?: string;
           productJson?: { nodes?: Array<{ filename?: string }> } | null;
           productLiquid?: { nodes?: Array<{ filename?: string }> } | null;
           indexJson?: { nodes?: Array<{ filename?: string }> } | null;
-          indexLiquid?: { nodes?: Array<{ filename?: string }> } | null;
+          indexLiquid?: { nodes?: Array<{
+            filename?: string;
+            body?: { content?: string } | null;
+          }> } | null;
+          appsLiquid?: { nodes?: Array<{ filename?: string }> } | null;
         }>;
       };
     };
@@ -884,23 +1106,39 @@ async function detectThemeCompatibility(admin: {
   }
 
   const theme = payload.data?.themes?.nodes?.[0];
-  const filenames = new Set([
-    ...(theme?.productJson?.nodes || []),
-    ...(theme?.productLiquid?.nodes || []),
-    ...(theme?.indexJson?.nodes || []),
-    ...(theme?.indexLiquid?.nodes || [])
-  ].map((file) => file.filename).filter(Boolean));
-  return {
-    themeName: theme?.name || "Published theme",
-    product: templateTypeFromFilenames(filenames, "product"),
-    index: templateTypeFromFilenames(filenames, "index")
-  };
-}
+  const themeId = theme?.id?.split("/").at(-1) || "current";
+  const codeEditorUrl = `https://${shopDomain}/admin/themes/${themeId}?key=sections/apps.liquid`;
+  const productJsonExists = Boolean(theme?.productJson?.nodes?.length);
+  const productLiquidExists = Boolean(theme?.productLiquid?.nodes?.length);
+  const indexJsonExists = Boolean(theme?.indexJson?.nodes?.length);
+  const indexLiquid = theme?.indexLiquid?.nodes?.[0];
+  const indexLiquidExists = Boolean(indexLiquid);
+  const hasDynamicHomeSections = Boolean(indexLiquid?.body?.content?.includes("content_for_index"));
+  const appsLiquidExists = Boolean(theme?.appsLiquid?.nodes?.length);
+  let status: ThemeInstallStatus = "unknown";
 
-function templateTypeFromFilenames(filenames: Set<string | undefined>, template: "product" | "index"): ThemeTemplateType {
-  if (filenames.has(`templates/${template}.json`)) return "json";
-  if (filenames.has(`templates/${template}.liquid`)) return "liquid";
-  return "unknown";
+  if (widgetKey === "reviewWidget" || widgetKey === "starRating") {
+    status = productJsonExists ? "ready" : productLiquidExists ? "manual" : "unknown";
+  } else if (indexJsonExists || (indexLiquidExists && hasDynamicHomeSections && appsLiquidExists)) {
+    status = "ready";
+  } else if (indexLiquidExists && hasDynamicHomeSections && !appsLiquidExists) {
+    status = "needs_apps_wrapper";
+  } else if (indexLiquidExists) {
+    status = "manual";
+  }
+
+  return {
+    ok: true,
+    id: "",
+    intent: "checkThemeInstall",
+    widgetKey,
+    status,
+    themeName: theme?.name || "Published theme",
+    codeEditorUrl,
+    error: "",
+    message: "",
+    brandProfile: null
+  };
 }
 
 function buildBrandManualInstallCode(layout: BrandTrustWidget["layout"], brandSlug: string) {
