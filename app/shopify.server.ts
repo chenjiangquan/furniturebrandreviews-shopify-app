@@ -59,6 +59,7 @@ const shopify = shopifyApp({
     }
   },
   future: {
+    expiringOfflineAccessTokens: true,
     unstable_newEmbeddedAuthStrategy: true
   },
   hooks: {
