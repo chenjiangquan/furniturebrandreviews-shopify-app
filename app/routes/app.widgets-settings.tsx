@@ -30,6 +30,16 @@ type BrandTrustWidget = {
   description: string;
   image: string;
   layout: "carousel" | "micro";
+  blockHandle: string;
+  installTarget: string;
+};
+
+type ThemeTemplateType = "json" | "liquid" | "unknown";
+
+type ThemeCompatibility = {
+  themeName: string;
+  product: ThemeTemplateType;
+  index: ThemeTemplateType;
 };
 
 type ManualInstallWidget = {
@@ -65,14 +75,18 @@ const brandTrustWidgets: BrandTrustWidget[] = [
     title: "Brand Review Carousel",
     description: "Display your FurnitureBrandReviews brand reviews in a trust-building carousel.",
     image: "/widget-previews/brand-review-carousel.jpg",
-    layout: "carousel"
+    layout: "carousel",
+    blockHandle: "fbr-brand-review-carousel",
+    installTarget: "newAppsSection"
   },
   {
     key: "brandMicro",
     title: "Brand Micro Trust Badge",
     description: "Show a compact brand rating badge anywhere on your store.",
     image: "/widget-previews/brand-micro-trust-badge.jpg",
-    layout: "micro"
+    layout: "micro",
+    blockHandle: "fbr-brand-micro-trust-badge",
+    installTarget: "newAppsSection"
   }
 ];
 
@@ -86,8 +100,19 @@ const WHATSAPP_SUPPORT_URL = "https://wa.me/447521530350";
 const CLAIM_PROFILE_URL = "https://www.furniturebrandreviews.com/claim-your-profile";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shopDomain = session.shop;
+  const themeCompatibilityPromise = cachedAdminLoader(
+    adminLoaderCacheKey(shopDomain, "theme-compatibility"),
+    () => detectThemeCompatibility(admin),
+    5 * 60_000
+  ).catch((error) => {
+    console.warn("Unable to detect published theme compatibility", {
+      shopDomain,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return { themeName: "Published theme", product: "unknown", index: "unknown" } as ThemeCompatibility;
+  });
   let entitlements: Awaited<ReturnType<typeof getShopEntitlements>>;
   let widgetSettings = {
     brandName: defaultBrandProfile.brandName,
@@ -156,7 +181,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       })
     ])
   );
-  const homeThemeEditorUrl = `https://${session.shop}/admin/themes/current/editor?template=index`;
+  const brandWidgetInstallUrls = Object.fromEntries(
+    brandTrustWidgets.map((widget) => [
+      widget.key,
+      buildThemeAppBlockInstallUrl({
+        shopDomain: session.shop,
+        apiKey: shopifyApiKey,
+        template: "index",
+        blockHandle: widget.blockHandle,
+        target: widget.installTarget
+      })
+    ])
+  );
   const productLiquidUrl = `https://${session.shop}/admin/themes/current?key=templates/product.liquid`;
   const appUrl = (process.env.SHOPIFY_APP_URL || "https://app.furniturebrandreviews.com").replace(/\/$/, "");
   const brandSlug = widgetSettings.brandSlug || brandSlugFromProfileUrl(widgetSettings.profileUrl) || "";
@@ -165,12 +201,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     googleSeoSettings.reviewsSiteEnabled &&
     googleSeoSettings.seoRichSnippetsEnabled &&
     googleSeoSettings.googleShoppingEnabled;
+  const themeCompatibility = await themeCompatibilityPromise;
 
   return {
     entitlements,
     googleSeoInstalled,
+    themeCompatibility,
     productWidgetInstallUrls,
-    homeThemeEditorUrl,
+    brandWidgetInstallUrls,
     productLiquidUrl,
     brandProfile: {
       brandName: widgetSettings.brandName || "",
@@ -280,7 +318,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function WidgetsSettings() {
-  const { entitlements, googleSeoInstalled, productWidgetInstallUrls, homeThemeEditorUrl, productLiquidUrl, brandProfile, notificationSettings, upgradeUrl, appUrl } = useLoaderData<typeof loader>();
+  const { entitlements, googleSeoInstalled, themeCompatibility, productWidgetInstallUrls, brandWidgetInstallUrls, productLiquidUrl, brandProfile, notificationSettings, upgradeUrl, appUrl } = useLoaderData<typeof loader>();
   const brandFetcher = useFetcher<typeof action>();
   const notificationFetcher = useFetcher<typeof action>();
   const navigate = useNavigate();
@@ -315,16 +353,26 @@ export default function WidgetsSettings() {
       {entitlements.isPro ? <RemixLink to="/app/google-seo" prefetch="render" aria-hidden tabIndex={-1} style={{ display: "none" }} /> : null}
       <BlockStack gap="500">
         <WidgetSection title="Product Review Widgets">
+          {themeCompatibility.product !== "json" ? (
+            <div style={{ gridColumn: "1 / -1" }}>
+              <LegacyThemeBanner themeName={themeCompatibility.themeName} template="product" detectedType={themeCompatibility.product} />
+            </div>
+          ) : null}
           {productReviewWidgets.map((widget) => {
+            const openManualInstall = () => setManualWidget({
+              title: widget.title,
+              code: buildProductManualInstallCode(appUrl, widget.key),
+              kind: widget.key === "starRating" ? "starRating" : "productReview"
+            });
             return (
               <WidgetCard key={widget.title} title={widget.title} description={widget.description} image={widget.image}>
                 <ButtonGroup>
-                  <Button url={productWidgetInstallUrls[widget.key]} target="_blank">Install</Button>
-                  <Button onClick={() => setManualWidget({
-                    title: widget.title,
-                    code: buildProductManualInstallCode(appUrl, widget.key),
-                    kind: widget.key === "starRating" ? "starRating" : "productReview"
-                  })}>
+                  {themeCompatibility.product === "json" ? (
+                    <Button url={productWidgetInstallUrls[widget.key]} target="_blank">Install</Button>
+                  ) : (
+                    <Button onClick={openManualInstall}>Install</Button>
+                  )}
+                  <Button onClick={openManualInstall}>
                     Manual install
                   </Button>
                   <Button onClick={() => navigate(widget.customizeUrl)} variant="primary">Customize</Button>
@@ -335,6 +383,11 @@ export default function WidgetsSettings() {
         </WidgetSection>
 
         <WidgetSection title="Brand Trust Widgets">
+          {themeCompatibility.index !== "json" ? (
+            <div style={{ gridColumn: "1 / -1" }}>
+              <LegacyThemeBanner themeName={themeCompatibility.themeName} template="index" detectedType={themeCompatibility.index} />
+            </div>
+          ) : null}
           {!entitlements.isPro ? (
             <div style={{ gridColumn: "1 / -1" }}>
               <Banner title="Brand Trust Widgets are a Pro feature" tone="info" action={{ content: "Upgrade to Pro", onAction: () => openTopLevel(upgradeUrl) }}>
@@ -451,23 +504,28 @@ export default function WidgetsSettings() {
           </div>
           {brandTrustWidgets.map((widget) => {
             const canInstall = Boolean(brandSlug) && entitlements.isPro;
+            const openManualInstall = () => setManualWidget({
+              title: widget.title,
+              code: buildBrandManualInstallCode(widget.layout, brandSlug),
+              kind: "brandTrust"
+            });
             return (
             <WidgetCard
               key={widget.title}
               title={widget.title}
               description={widget.description}
               image={widget.image}
-              instructions={<BrandWidgetInstallInstructions />}
+              instructions={<BrandWidgetInstallInstructions templateType={themeCompatibility.index} />}
             >
               {!canInstall ? <Text as="p" tone="critical">Enter your brand name before installing this widget.</Text> : null}
               <ButtonGroup>
-                <Button url={homeThemeEditorUrl} target="_blank" disabled={!canInstall}>Install</Button>
+                {themeCompatibility.index === "json" ? (
+                  <Button url={brandWidgetInstallUrls[widget.key]} target="_blank" disabled={!canInstall}>Install</Button>
+                ) : (
+                  <Button onClick={openManualInstall} disabled={!canInstall}>Install</Button>
+                )}
                 <Button
-                  onClick={() => setManualWidget({
-                    title: widget.title,
-                    code: buildBrandManualInstallCode(widget.layout, brandSlug),
-                    kind: "brandTrust"
-                  })}
+                  onClick={openManualInstall}
                   disabled={!canInstall}
                 >
                   Manual install
@@ -570,16 +628,40 @@ function WidgetCard({
   );
 }
 
-function BrandWidgetInstallInstructions() {
+function BrandWidgetInstallInstructions({ templateType }: { templateType: ThemeTemplateType }) {
   return (
     <BlockStack gap="100">
-      <Text as="p" tone="subdued">
-        <strong>Online Store 2.0 / JSON theme:</strong> click <strong>Install</strong>, then go to <strong>Add section → Apps</strong> and choose this widget.
-      </Text>
-      <Text as="p" tone="subdued">
-        <strong>Legacy Liquid theme:</strong> click <strong>Install</strong>, then go to <strong>Add section → Sections</strong> and choose this widget. If it is not listed, click <strong>Manual install</strong> and add the code to a <strong>Custom Liquid/HTML</strong> section or theme file.
-      </Text>
+      {templateType === "json" ? (
+        <Text as="p" tone="subdued">
+          <strong>Online Store 2.0 / JSON theme:</strong> click <strong>Install</strong> to preview this widget in a new Apps section, then choose its position and save.
+        </Text>
+      ) : (
+        <Text as="p" tone="subdued">
+          <strong>Legacy Liquid theme:</strong> Shopify does not list app blocks or app sections in this theme. Click <strong>Install</strong> to open the manual code and paste it into a Custom Liquid/HTML section or theme file.
+        </Text>
+      )}
     </BlockStack>
+  );
+}
+
+function LegacyThemeBanner({
+  themeName,
+  template,
+  detectedType
+}: {
+  themeName: string;
+  template: "product" | "index";
+  detectedType: ThemeTemplateType;
+}) {
+  const templateFilename = `templates/${template}.${detectedType === "liquid" ? "liquid" : "json"}`;
+  return (
+    <Banner title={detectedType === "liquid" ? "Legacy Liquid theme detected" : "Theme compatibility could not be confirmed"} tone="info">
+      <Text as="p">
+        {detectedType === "liquid"
+          ? `${themeName} uses ${templateFilename}. Shopify app blocks are unavailable on this template, so Install will open the manual installation code.`
+          : "Install will open the safe manual installation instructions because the published theme template could not be checked."}
+      </Text>
+    </Banner>
   );
 }
 
@@ -741,6 +823,58 @@ function buildThemeAppBlockInstallUrl({
     target
   });
   return `https://${shopDomain}/admin/themes/current/editor?${params.toString()}`;
+}
+
+async function detectThemeCompatibility(admin: {
+  graphql: (query: string) => Promise<Response>;
+}): Promise<ThemeCompatibility> {
+  const response = await admin.graphql(`#graphql
+    query PublishedThemeCompatibility {
+      themes(first: 5, roles: [MAIN]) {
+        nodes {
+          name
+          files(
+            first: 10
+            filenames: [
+              "templates/product.json"
+              "templates/product.liquid"
+              "templates/index.json"
+              "templates/index.liquid"
+            ]
+          ) {
+            nodes { filename }
+          }
+        }
+      }
+    }
+  `);
+  if (!response.ok) throw new Error(`Shopify theme query failed (${response.status})`);
+
+  const payload = await response.json() as {
+    data?: {
+      themes?: {
+        nodes?: Array<{ name?: string; files?: { nodes?: Array<{ filename?: string }> } | null }>;
+      };
+    };
+    errors?: Array<{ message?: string }>;
+  };
+  if (payload.errors?.length) {
+    throw new Error(payload.errors.map((error) => error.message || "Shopify theme query failed").join("; "));
+  }
+
+  const theme = payload.data?.themes?.nodes?.[0];
+  const filenames = new Set((theme?.files?.nodes || []).map((file) => file.filename).filter(Boolean));
+  return {
+    themeName: theme?.name || "Published theme",
+    product: templateTypeFromFilenames(filenames, "product"),
+    index: templateTypeFromFilenames(filenames, "index")
+  };
+}
+
+function templateTypeFromFilenames(filenames: Set<string | undefined>, template: "product" | "index"): ThemeTemplateType {
+  if (filenames.has(`templates/${template}.json`)) return "json";
+  if (filenames.has(`templates/${template}.liquid`)) return "liquid";
+  return "unknown";
 }
 
 function buildBrandManualInstallCode(layout: BrandTrustWidget["layout"], brandSlug: string) {
