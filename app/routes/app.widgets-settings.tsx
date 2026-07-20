@@ -394,11 +394,6 @@ export default function WidgetsSettings() {
         </WidgetSection>
 
         <WidgetSection title="Brand Trust Widgets">
-          {themeCompatibility.index !== "json" ? (
-            <div style={{ gridColumn: "1 / -1" }}>
-              <LegacyThemeBanner themeName={themeCompatibility.themeName} template="index" detectedType={themeCompatibility.index} />
-            </div>
-          ) : null}
           {!entitlements.isPro ? (
             <div style={{ gridColumn: "1 / -1" }}>
               <Banner title="Brand Trust Widgets are a Pro feature" tone="info" action={{ content: "Upgrade to Pro", onAction: () => openTopLevel(upgradeUrl) }}>
@@ -520,30 +515,17 @@ export default function WidgetsSettings() {
               code: buildBrandManualInstallCode(widget.layout, brandSlug),
               kind: "brandTrust"
             });
-            const openUnknownInstall = () => setManualWidget({
-              title: widget.title,
-              code: buildBrandManualInstallCode(widget.layout, brandSlug),
-              kind: "brandTrust",
-              editorUrl: brandWidgetInstallUrls[widget.key],
-              compatibilityUnknown: true
-            });
             return (
             <WidgetCard
               key={widget.title}
               title={widget.title}
               description={widget.description}
               image={widget.image}
-              instructions={<BrandWidgetInstallInstructions templateType={themeCompatibility.index} />}
+              instructions={<BrandWidgetInstallInstructions widgetKey={widget.key} />}
             >
               {!canInstall ? <Text as="p" tone="critical">Enter your brand name before installing this widget.</Text> : null}
               <ButtonGroup>
-                {themeCompatibility.index === "json" ? (
-                  <Button url={brandWidgetInstallUrls[widget.key]} target="_blank" disabled={!canInstall}>Install</Button>
-                ) : themeCompatibility.index === "unknown" ? (
-                  <Button onClick={openUnknownInstall} disabled={!canInstall}>Install</Button>
-                ) : (
-                  <Button onClick={openManualInstall} disabled={!canInstall}>Install</Button>
-                )}
+                <Button url={brandWidgetInstallUrls[widget.key]} target="_blank" disabled={!canInstall}>Install</Button>
                 <Button
                   onClick={openManualInstall}
                   disabled={!canInstall}
@@ -648,20 +630,16 @@ function WidgetCard({
   );
 }
 
-function BrandWidgetInstallInstructions({ templateType }: { templateType: ThemeTemplateType }) {
+function BrandWidgetInstallInstructions({ widgetKey }: { widgetKey: BrandTrustWidget["key"] }) {
   return (
     <BlockStack gap="100">
-      {templateType === "json" ? (
+      {widgetKey === "brandCarousel" ? (
         <Text as="p" tone="subdued">
-          <strong>Online Store 2.0 / JSON theme:</strong> click <strong>Install</strong> to preview this widget in a new Apps section, then choose its position and save.
-        </Text>
-      ) : templateType === "unknown" ? (
-        <Text as="p" tone="subdued">
-          <strong>Theme type not confirmed:</strong> click <strong>Install</strong> to try the Theme Editor. If the widget is unavailable there, use the manual code instead.
+          Click <strong>Install</strong> to add this widget as an app section in the Theme Editor. Compatible Liquid themes can also support this; if Shopify does not list it, use <strong>Manual install</strong>.
         </Text>
       ) : (
         <Text as="p" tone="subdued">
-          <strong>Legacy Liquid theme:</strong> Shopify does not list app blocks or app sections in this theme. Click <strong>Install</strong> to open the manual code and paste it into a Custom Liquid/HTML section or theme file.
+          Click <strong>Install</strong> to open the Theme Editor, then add this badge inside a section that supports app blocks, such as a compatible footer. If the target section does not accept app blocks, use <strong>Manual install</strong>.
         </Text>
       )}
     </BlockStack>
