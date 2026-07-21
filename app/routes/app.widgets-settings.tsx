@@ -1066,12 +1066,7 @@ async function detectThemeInstallCapability(admin: {
             nodes { filename }
           }
           indexLiquid: files(first: 1, filenames: ["templates/index.liquid"]) {
-            nodes {
-              filename
-              body {
-                ... on OnlineStoreThemeFileBodyText { content }
-              }
-            }
+            nodes { filename }
           }
           appsLiquid: files(first: 1, filenames: ["sections/apps.liquid"]) {
             nodes { filename }
@@ -1091,10 +1086,7 @@ async function detectThemeInstallCapability(admin: {
           productJson?: { nodes?: Array<{ filename?: string }> } | null;
           productLiquid?: { nodes?: Array<{ filename?: string }> } | null;
           indexJson?: { nodes?: Array<{ filename?: string }> } | null;
-          indexLiquid?: { nodes?: Array<{
-            filename?: string;
-            body?: { content?: string } | null;
-          }> } | null;
+          indexLiquid?: { nodes?: Array<{ filename?: string }> } | null;
           appsLiquid?: { nodes?: Array<{ filename?: string }> } | null;
         }>;
       };
@@ -1111,20 +1103,21 @@ async function detectThemeInstallCapability(admin: {
   const productJsonExists = Boolean(theme?.productJson?.nodes?.length);
   const productLiquidExists = Boolean(theme?.productLiquid?.nodes?.length);
   const indexJsonExists = Boolean(theme?.indexJson?.nodes?.length);
-  const indexLiquid = theme?.indexLiquid?.nodes?.[0];
-  const indexLiquidExists = Boolean(indexLiquid);
-  const hasDynamicHomeSections = Boolean(indexLiquid?.body?.content?.includes("content_for_index"));
+  const indexLiquidExists = Boolean(theme?.indexLiquid?.nodes?.length);
   const appsLiquidExists = Boolean(theme?.appsLiquid?.nodes?.length);
   let status: ThemeInstallStatus = "unknown";
 
   if (widgetKey === "reviewWidget" || widgetKey === "starRating") {
     status = productJsonExists ? "ready" : productLiquidExists ? "manual" : "unknown";
-  } else if (indexJsonExists || (indexLiquidExists && hasDynamicHomeSections && appsLiquidExists)) {
+  } else if (indexJsonExists || (indexLiquidExists && appsLiquidExists)) {
     status = "ready";
-  } else if (indexLiquidExists && hasDynamicHomeSections && !appsLiquidExists) {
+  } else if (indexLiquidExists && !appsLiquidExists) {
+    // The file-presence query above is deliberately the source of truth. Some
+    // shops reject the optional theme-file body field even though read_themes
+    // can list the files. In that case we must still guide a legacy theme that
+    // is missing sections/apps.liquid through the wrapper setup instead of
+    // incorrectly falling back to the generic "compatibility unknown" modal.
     status = "needs_apps_wrapper";
-  } else if (indexLiquidExists) {
-    status = "manual";
   }
 
   return {
