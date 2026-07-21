@@ -23,6 +23,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "~/db.server";
 import { buildShopifyPlanSelectionUrl, getShopEntitlements } from "~/models/entitlements.server";
 import { defaultProductReviewWidgetSettings } from "~/models/product-review-widget-settings";
+import { clearPublicWidgetCache } from "~/models/public-widget-cache.server";
 import { getProductReviewWidgetSettings } from "~/models/reviews.server";
 import { authenticate } from "~/shopify.server";
 
@@ -133,6 +134,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         update: resetData,
         create: { shopDomain, ...resetData }
       });
+      clearPublicWidgetCache(shopDomain);
       return { ok: true, error: "", settings: savedSettings, savedAt: new Date().toISOString() };
     } catch (error) {
       console.error("Product review widget reset failed", error);
@@ -167,6 +169,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
 
     const savedSettings = await prisma.productReviewSettings.findUniqueOrThrow({ where: { shopDomain } });
+    clearPublicWidgetCache(shopDomain);
 
     return { ok: true, error: "", settings: savedSettings, savedAt: new Date().toISOString() };
   } catch (error) {

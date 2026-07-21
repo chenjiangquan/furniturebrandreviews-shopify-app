@@ -20,6 +20,7 @@ import {
   TextField
 } from "@shopify/polaris";
 import prisma from "~/db.server";
+import { clearPublicWidgetCache } from "~/models/public-widget-cache.server";
 import { adminLoaderCacheKey, cachedAdminLoader, invalidateAdminLoaderCache } from "~/models/admin-loader-cache.server";
 import { sendAppOwnerImportNotification } from "~/models/notifications.server";
 import {
@@ -158,6 +159,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       where: { id, shopDomain: session.shop },
       data: { verifiedPurchase: form.get("verifiedPurchase") === "on" }
     });
+    clearPublicWidgetCache(session.shop);
   }
 
   if (intent === "markAllVerified") {
@@ -172,6 +174,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       where: { shopDomain: session.shop, verifiedPurchase: false },
       data: { verifiedPurchase: true }
     });
+    clearPublicWidgetCache(session.shop);
     return { ok: true, intent: "markAllVerified", updatedCount: result.count };
   }
 

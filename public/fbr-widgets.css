@@ -758,6 +758,13 @@
   padding: 3px 8px;
 }
 
+.fbr-widget .fbr-layout-sidebar .fbr-verified {
+  align-items: center !important;
+  display: inline-flex !important;
+  flex: 0 0 auto;
+  visibility: visible !important;
+}
+
 .fbr-carousel {
   display: grid;
   gap: 12px;

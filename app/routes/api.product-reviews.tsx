@@ -10,46 +10,17 @@ import {
   requiredString
 } from "~/models/reviews.server";
 import { isFreeProShop } from "~/shopify.server";
-
-const PUBLIC_WIDGET_CACHE_TTL_MS = 5 * 60_000;
-const MAX_PUBLIC_WIDGET_CACHE_ENTRIES = 500;
-const publicWidgetCache = new Map<string, { expiresAt: number; data: Record<string, unknown> }>();
-
-function publicWidgetCacheKey(
-  shop: string,
-  productId: string,
-  productHandle: string,
-  productTitle: string,
-  summaryOnly: boolean
-) {
-  return JSON.stringify([shop, productId, productHandle, productTitle, summaryOnly]);
-}
-
-function readPublicWidgetCache(key: string) {
-  const cached = publicWidgetCache.get(key);
-  if (cached && cached.expiresAt > Date.now()) return cached.data;
-  if (cached) publicWidgetCache.delete(key);
-  return null;
-}
-
-function writePublicWidgetCache(key: string, data: Record<string, unknown>) {
-  if (publicWidgetCache.size >= MAX_PUBLIC_WIDGET_CACHE_ENTRIES) {
-    const oldestKey = publicWidgetCache.keys().next().value;
-    if (oldestKey) publicWidgetCache.delete(oldestKey);
-  }
-  publicWidgetCache.set(key, { expiresAt: Date.now() + PUBLIC_WIDGET_CACHE_TTL_MS, data });
-}
-
-function clearPublicWidgetCache(shop: string) {
-  for (const key of publicWidgetCache.keys()) {
-    if (key.startsWith(`["${shop.replaceAll('"', '\\"')}",`)) publicWidgetCache.delete(key);
-  }
-}
+import {
+  clearPublicWidgetCache,
+  publicWidgetCacheKey,
+  readPublicWidgetCache,
+  writePublicWidgetCache
+} from "~/models/public-widget-cache.server";
 
 const publicCacheHeaders = {
-  "Cache-Control": "public, max-age=60, stale-while-revalidate=600",
-  "CDN-Cache-Control": "public, max-age=300, stale-while-revalidate=600",
-  "Vercel-CDN-Cache-Control": "public, max-age=300, stale-while-revalidate=600"
+  "Cache-Control": "no-store, max-age=0",
+  "CDN-Cache-Control": "no-store",
+  "Vercel-CDN-Cache-Control": "no-store"
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
