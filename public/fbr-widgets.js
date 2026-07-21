@@ -14,6 +14,7 @@
   const shop = (el) => el.dataset.shop;
   const productReviewUrl = (el) => `${apiBase(el)}/api/product-reviews?shop=${encodeURIComponent(shop(el))}&productId=${encodeURIComponent(el.dataset.productId || "")}&productHandle=${encodeURIComponent(el.dataset.productHandle || "")}&productTitle=${encodeURIComponent(el.dataset.productTitle || "")}`;
   const productReviewSummaryUrl = (el) => `${productReviewUrl(el)}&summaryOnly=1`;
+  const productReviewSettingsUrl = (el) => `${apiBase(el)}/api/product-review-widget-settings?shop=${encodeURIComponent(shop(el))}`;
   const fetchCache = new Map();
   const inflightFetches = new Map();
   const usefulCountOverrides = new Map();
@@ -75,6 +76,7 @@
     showReviewerPhotos: true,
     hideNoReviewProduct: false,
     starRatingBadgeHideNoReviewProduct: false,
+    starRatingBadgeStarGap: 2,
     layoutType: "standard",
     carouselCardsPerRow: 3,
     carouselAutoSlide: false,
@@ -295,8 +297,8 @@
   function settingsFromReviewData(data, fallbackSettings) {
     const settings = {
       ...defaultProductSettings,
-      ...(fallbackSettings || {}),
-      ...((data && data.widgetSettings) || {})
+      ...((data && data.widgetSettings) || {}),
+      ...(fallbackSettings || {})
     };
     if (settings.sortDefault === "lowest_rating") settings.sortDefault = "pictures_first";
     settings.showAverageRating = true;
@@ -304,6 +306,23 @@
     settings.showRatingBreakdown = true;
     settings.showWriteReviewButton = true;
     return settings;
+  }
+
+  function starDataWithLatestSettings(data, settings) {
+    if (!settings) return data;
+    return {
+      ...data,
+      starRatingBadgeSettings: {
+        starColor: settings.starRatingBadgeStarColor,
+        textColor: settings.starRatingBadgeTextColor,
+        backgroundColor: settings.starRatingBadgeBackgroundColor,
+        borderColor: settings.starRatingBadgeBorderColor,
+        borderWidth: settings.starRatingBadgeBorderWidth,
+        borderRadius: settings.starRatingBadgeBorderRadius,
+        starGap: settings.starRatingBadgeStarGap,
+        hideNoReviewProduct: settings.starRatingBadgeHideNoReviewProduct
+      }
+    };
   }
 
   function removeLegacyFloatingBadges() {
@@ -328,6 +347,7 @@
       borderColor: widgetSettings.starRatingBadgeBorderColor,
       borderWidth: widgetSettings.starRatingBadgeBorderWidth,
       borderRadius: widgetSettings.starRatingBadgeBorderRadius,
+      starGap: widgetSettings.starRatingBadgeStarGap,
       hideNoReviewProduct: widgetSettings.starRatingBadgeHideNoReviewProduct
     };
     if (badge.hideNoReviewProduct && Number(data.reviewCount) === 0) {
@@ -340,7 +360,7 @@
       ...defaultProductSettings,
       starColor: badge.starColor || computedStyles.getPropertyValue("--fbr-star").trim() || defaultProductSettings.starColor,
       starSize: 18,
-      starGap: 2
+      starGap: Math.max(0, Math.min(12, Number(badge.starGap ?? 2)))
     };
     el.innerHTML = `
       <div class="fbr-row fbr-product-star-rating-badge" style="color:${escapeHtml(badge.textColor || "#202223")};background:${escapeHtml(badge.backgroundColor || "#ffffff")};border:${Number(badge.borderWidth) || 0}px solid ${escapeHtml(badge.borderColor || "#dfe3e8")};border-radius:${Math.max(0, Number(badge.borderRadius) || 0)}px;">
@@ -1346,10 +1366,14 @@
         renderedFromCache = true;
       }
       try {
-        const data = await fetchJson(url);
+        const [data, latestSettings] = await Promise.all([
+          fetchJson(url),
+          fetchJson(productReviewSettingsUrl(el)).catch(() => null)
+        ]);
         writePersistentCache(url, data);
-        renderProductStars(el, data);
-        applyProductReviewSeo(el, data);
+        const currentData = starDataWithLatestSettings(data, latestSettings);
+        renderProductStars(el, currentData);
+        applyProductReviewSeo(el, currentData);
       } catch (error) {
         console.error("[fbr] Product Star Rating failed", error);
         if (!renderedFromCache) {
@@ -1369,9 +1393,12 @@
         renderedFromCache = true;
       }
       try {
-        const data = await fetchJson(url);
+        const [data, latestSettings] = await Promise.all([
+          fetchJson(url),
+          fetchJson(productReviewSettingsUrl(el)).catch(() => null)
+        ]);
         writePersistentCache(url, data);
-        const settings = data.widgetSettings || await fetchJson(`${apiBase(el)}/api/product-review-widget-settings?shop=${encodeURIComponent(shop(el))}`).catch(() => defaultProductSettings);
+        const settings = latestSettings || data.widgetSettings || defaultProductSettings;
         renderProductReviews(el, data, settingsFromReviewData(data, settings));
         applyProductReviewSeo(el, data);
       } catch (error) {
