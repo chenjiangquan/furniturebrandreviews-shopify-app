@@ -261,6 +261,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "checkThemeInstall") {
     const widgetKey = String(form.get("widgetKey") || "") as InstallWidgetKey;
+    const appsWrapperConfirmed = String(form.get("appsWrapperConfirmed") || "") === "true";
     if (!isInstallWidgetKey(widgetKey)) {
       return {
         ok: false,
@@ -277,7 +278,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     try {
-      return await detectThemeInstallCapability(admin, session.shop, widgetKey);
+      return await detectThemeInstallCapability(admin, session.shop, widgetKey, appsWrapperConfirmed);
     } catch (error) {
       console.warn("Unable to check theme compatibility during widget installation", {
         shopDomain: session.shop,
@@ -285,12 +286,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         error: error instanceof Error ? error.message : String(error)
       });
       const isBrandWidget = widgetKey === "brandCarousel" || widgetKey === "brandMicro";
+      const confirmedBrandWrapper = isBrandWidget && appsWrapperConfirmed;
       return {
         ok: isBrandWidget,
         id: "",
         intent: "checkThemeInstall" as const,
         widgetKey,
-        status: isBrandWidget ? "needs_apps_wrapper" as const : "unknown" as const,
+        status: confirmedBrandWrapper
+          ? "ready" as const
+          : isBrandWidget
+            ? "needs_apps_wrapper" as const
+            : "unknown" as const,
         themeName: "Published theme",
         codeEditorUrl: isBrandWidget
           ? `https://${session.shop}/admin/themes/current?key=sections/apps.liquid`
@@ -704,7 +710,11 @@ export default function WidgetsSettings() {
             installWindowRef.current?.close();
             installWindowRef.current = window.open("about:blank", "_blank");
             installFetcher.submit(
-              { intent: "checkThemeInstall", widgetKey: pendingInstall.widgetKey },
+              {
+                intent: "checkThemeInstall",
+                widgetKey: pendingInstall.widgetKey,
+                appsWrapperConfirmed: "true"
+              },
               { method: "post" }
             );
           }}
@@ -843,7 +853,7 @@ function AppsWrapperTutorialModal({
             <ol style={{ margin: 0, paddingLeft: 18 }}>
               <li>Click <strong>Copy apps.liquid code</strong>.</li>
               <li>Open the current theme code editor.</li>
-              <li>Under <strong>Sections</strong>, create a new section named <strong>apps</strong>.</li>
+              <li>Under <strong>Sections</strong>, create a new section named <strong>apps.liquid</strong>.</li>
               <li>Replace its contents with the copied code and click <strong>Save</strong>.</li>
               <li>Return here and click <strong>I've saved it — check again</strong>.</li>
             </ol>
@@ -1057,7 +1067,7 @@ function isInstallWidgetKey(value: string): value is InstallWidgetKey {
 
 async function detectThemeInstallCapability(admin: {
   graphql: (query: string) => Promise<Response>;
-}, shopDomain: string, widgetKey: InstallWidgetKey): Promise<ThemeInstallCheckResponse> {
+}, shopDomain: string, widgetKey: InstallWidgetKey, appsWrapperConfirmed = false): Promise<ThemeInstallCheckResponse> {
   const response = await admin.graphql(`#graphql
     query CurrentThemeInstallCompatibility {
       themes(first: 1, roles: [MAIN]) {
@@ -1117,7 +1127,7 @@ async function detectThemeInstallCapability(admin: {
 
   if (widgetKey === "reviewWidget" || widgetKey === "starRating") {
     status = productJsonExists ? "ready" : productLiquidExists ? "manual" : "unknown";
-  } else if (indexJsonExists || (indexLiquidExists && appsLiquidExists)) {
+  } else if (indexJsonExists || (indexLiquidExists && (appsLiquidExists || appsWrapperConfirmed))) {
     status = "ready";
   } else if (indexLiquidExists && !appsLiquidExists) {
     // The file-presence query above is deliberately the source of truth. Some
