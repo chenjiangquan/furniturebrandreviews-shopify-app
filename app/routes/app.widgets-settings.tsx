@@ -62,6 +62,7 @@ type AppsWrapperTutorial = {
   title: string;
   widgetKey: InstallWidgetKey;
   codeEditorUrl: string;
+  editorUrl: string;
 };
 
 const productReviewWidgets = [
@@ -283,15 +284,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         widgetKey,
         error: error instanceof Error ? error.message : String(error)
       });
+      const isBrandWidget = widgetKey === "brandCarousel" || widgetKey === "brandMicro";
       return {
-        ok: false,
+        ok: isBrandWidget,
         id: "",
         intent: "checkThemeInstall" as const,
         widgetKey,
-        status: "unknown" as const,
+        status: isBrandWidget ? "needs_apps_wrapper" as const : "unknown" as const,
         themeName: "Published theme",
-        codeEditorUrl: "",
-        error: "The current theme could not be checked.",
+        codeEditorUrl: isBrandWidget
+          ? `https://${session.shop}/admin/themes/current?key=sections/apps.liquid`
+          : "",
+        error: isBrandWidget ? "" : "The current theme could not be checked.",
         message: "",
         brandProfile: null
       };
@@ -440,7 +444,8 @@ export default function WidgetsSettings() {
       setAppsWrapperTutorial({
         title: pendingInstall.title,
         widgetKey: pendingInstall.widgetKey,
-        codeEditorUrl: result.codeEditorUrl
+        codeEditorUrl: result.codeEditorUrl,
+        editorUrl: pendingInstall.editorUrl
       });
       return;
     }
@@ -855,6 +860,9 @@ function AppsWrapperTutorialModal({
             </Button>
             {tutorial?.codeEditorUrl ? (
               <Button url={tutorial.codeEditorUrl} target="_blank">Open theme code editor</Button>
+            ) : null}
+            {tutorial?.editorUrl ? (
+              <Button url={tutorial.editorUrl} target="_blank">Continue in Theme Editor</Button>
             ) : null}
           </InlineStack>
           <Box background="bg-surface-secondary" borderRadius="200" padding="300">
