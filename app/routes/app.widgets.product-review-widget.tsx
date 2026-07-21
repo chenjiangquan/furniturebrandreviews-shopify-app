@@ -707,9 +707,9 @@ function ProductReviewPreview({ settings }: { settings: WidgetSettings }) {
                   </div>
 
                   {activeTab === "reviews" ? (
-                    <div>
+                    <div style={{ display: "grid", gap: settings.reviewCardSpacing }}>
                       {previewReviews.map((review) => (
-                        <article key={review.title} style={{ borderBottom: `1px solid ${settings.borderColor}`, padding: "26px 0" }}>
+                        <article key={review.title} style={reviewCardStyle}>
                           <BlockStack gap="200">
                             <InlineStack gap="200" blockAlign="center">
                               {settings.showReviewerPhotos ? <InitialsAvatar name={review.name} settings={settings} /> : null}

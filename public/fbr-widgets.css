@@ -139,11 +139,9 @@
 }
 
 .fbr-layout-sidebar .fbr-review-list-sidebar .fbr-review-item {
-  border: 0 !important;
-  border-bottom: 1px solid var(--fbr-widget-border-color, #dcdfe4) !important;
-  border-radius: 0 !important;
-  margin-bottom: 0 !important;
-  padding: 28px 0 !important;
+  border: var(--fbr-review-card-border-width, 1px) solid var(--fbr-widget-border-color, #dcdfe4) !important;
+  border-radius: var(--fbr-radius) !important;
+  padding: 18px !important;
 }
 
 .fbr-product-review-header h3 {
