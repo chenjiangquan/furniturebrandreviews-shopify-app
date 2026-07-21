@@ -161,6 +161,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "markAllVerified") {
+    if (!entitlements.isPro) {
+      return {
+        ok: false,
+        intent: "markAllVerified",
+        error: "Mark all as verified is available on the Pro plan."
+      };
+    }
     const result = await prisma.productReview.updateMany({
       where: { shopDomain: session.shop, verifiedPurchase: false },
       data: { verifiedPurchase: true }
@@ -273,7 +280,7 @@ export default function ProductReviews() {
   const [importOpen, setImportOpen] = React.useState(false);
   const [markAllVerifiedOpen, setMarkAllVerifiedOpen] = React.useState(false);
   const markAllVerifiedFetcher = useFetcher();
-  const markAllVerifiedResult = markAllVerifiedFetcher.data as { ok?: boolean; intent?: string; updatedCount?: number } | undefined;
+  const markAllVerifiedResult = markAllVerifiedFetcher.data as { ok?: boolean; intent?: string; updatedCount?: number; error?: string } | undefined;
 
   React.useEffect(() => {
     if (markAllVerifiedResult?.ok && markAllVerifiedResult.intent === "markAllVerified") {
@@ -340,7 +347,12 @@ export default function ProductReviews() {
       secondaryActions={[
         { content: "Import", onAction: () => setImportOpen(true) },
         { content: "Add review", onAction: () => setShowAddReview((open) => !open) },
-        { content: "Mark all as verified", onAction: () => setMarkAllVerifiedOpen(true) }
+        {
+          content: entitlements.isPro ? "Mark all as verified" : "Mark all as verified — Pro",
+          onAction: () => entitlements.isPro
+            ? setMarkAllVerifiedOpen(true)
+            : window.open(upgradeUrl, "_top")
+        }
       ]}
     >
       <div style={{ paddingBottom: 80 }}>
@@ -375,6 +387,12 @@ export default function ProductReviews() {
                 ? "1 review was marked as verified."
                 : `${markAllVerifiedResult.updatedCount || 0} reviews were marked as verified.`}
             </Text>
+          </Banner>
+        ) : null}
+
+        {markAllVerifiedResult?.ok === false && markAllVerifiedResult.error ? (
+          <Banner title="Pro plan required" tone="warning">
+            <Text as="p">{markAllVerifiedResult.error}</Text>
           </Banner>
         ) : null}
 
