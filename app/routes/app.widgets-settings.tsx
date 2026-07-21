@@ -35,7 +35,7 @@ type BrandTrustWidget = {
 };
 
 type InstallWidgetKey = "reviewWidget" | "starRating" | BrandTrustWidget["key"];
-type ThemeInstallStatus = "ready" | "needs_apps_wrapper" | "manual" | "unknown";
+type ThemeInstallStatus = "ready" | "manual" | "unknown";
 
 type ThemeInstallCheckResponse = {
   ok: boolean;
@@ -56,13 +56,6 @@ type ManualInstallWidget = {
   kind: "productReview" | "starRating" | "brandTrust";
   editorUrl?: string;
   compatibilityUnknown?: boolean;
-};
-
-type AppsWrapperTutorial = {
-  title: string;
-  widgetKey: InstallWidgetKey;
-  codeEditorUrl: string;
-  editorUrl: string;
 };
 
 const productReviewWidgets = [
@@ -115,31 +108,6 @@ const defaultBrandProfile = {
 
 const WHATSAPP_SUPPORT_URL = "https://wa.me/447521530350";
 const CLAIM_PROFILE_URL = "https://www.furniturebrandreviews.com/claim-your-profile";
-const APPS_WRAPPER_CODE = `<div class="fbr-apps-section">
-  {% for block in section.blocks %}
-    {% render block %}
-  {% endfor %}
-</div>
-
-{% schema %}
-{
-  "name": "Apps",
-  "tag": "section",
-  "class": "shopify-section--apps",
-  "settings": [],
-  "blocks": [
-    {
-      "type": "@app"
-    }
-  ],
-  "presets": [
-    {
-      "name": "Apps"
-    }
-  ]
-}
-{% endschema %}`;
-
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
@@ -261,7 +229,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "checkThemeInstall") {
     const widgetKey = String(form.get("widgetKey") || "") as InstallWidgetKey;
-    const appsWrapperConfirmed = String(form.get("appsWrapperConfirmed") || "") === "true";
     if (!isInstallWidgetKey(widgetKey)) {
       return {
         ok: false,
@@ -278,30 +245,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     try {
-      return await detectThemeInstallCapability(admin, session.shop, widgetKey, appsWrapperConfirmed);
+      return await detectThemeInstallCapability(admin, widgetKey);
     } catch (error) {
       console.warn("Unable to check theme compatibility during widget installation", {
         shopDomain: session.shop,
         widgetKey,
         error: error instanceof Error ? error.message : String(error)
       });
-      const isBrandWidget = widgetKey === "brandCarousel" || widgetKey === "brandMicro";
-      const confirmedBrandWrapper = isBrandWidget && appsWrapperConfirmed;
       return {
-        ok: isBrandWidget,
+        ok: false,
         id: "",
         intent: "checkThemeInstall" as const,
         widgetKey,
-        status: confirmedBrandWrapper
-          ? "ready" as const
-          : isBrandWidget
-            ? "needs_apps_wrapper" as const
-            : "unknown" as const,
+        status: "unknown" as const,
         themeName: "Published theme",
-        codeEditorUrl: isBrandWidget
-          ? `https://${session.shop}/admin/themes/current?key=sections/apps.liquid`
-          : "",
-        error: isBrandWidget ? "" : "The current theme could not be checked.",
+        codeEditorUrl: "",
+        error: "The current theme could not be checked.",
         message: "",
         brandProfile: null
       };
@@ -400,7 +359,6 @@ export default function WidgetsSettings() {
   const installFetcher = useFetcher<ThemeInstallCheckResponse>();
   const navigate = useNavigate();
   const [manualWidget, setManualWidget] = React.useState<ManualInstallWidget | null>(null);
-  const [appsWrapperTutorial, setAppsWrapperTutorial] = React.useState<AppsWrapperTutorial | null>(null);
   const pendingInstallRef = React.useRef<{
     widgetKey: InstallWidgetKey;
     title: string;
@@ -433,7 +391,6 @@ export default function WidgetsSettings() {
     if (!result || !pendingInstall || result.widgetKey !== pendingInstall.widgetKey) return;
 
     if (result.status === "ready") {
-      setAppsWrapperTutorial(null);
       if (installWindowRef.current && !installWindowRef.current.closed) {
         installWindowRef.current.location.href = pendingInstall.editorUrl;
       } else {
@@ -444,21 +401,8 @@ export default function WidgetsSettings() {
       return;
     }
 
-    if (result.status === "needs_apps_wrapper") {
-      installWindowRef.current?.close();
-      installWindowRef.current = null;
-      setAppsWrapperTutorial({
-        title: pendingInstall.title,
-        widgetKey: pendingInstall.widgetKey,
-        codeEditorUrl: result.codeEditorUrl,
-        editorUrl: pendingInstall.editorUrl
-      });
-      return;
-    }
-
     installWindowRef.current?.close();
     installWindowRef.current = null;
-    setAppsWrapperTutorial(null);
     setManualWidget({
       ...pendingInstall.manualWidget,
       editorUrl: result.status === "unknown" ? pendingInstall.editorUrl : undefined,
@@ -701,30 +645,6 @@ export default function WidgetsSettings() {
           productLiquidUrl={productLiquidUrl}
           onClose={() => setManualWidget(null)}
         />
-        <AppsWrapperTutorialModal
-          tutorial={appsWrapperTutorial}
-          checking={installFetcher.state !== "idle"}
-          onCheckAgain={() => {
-            const pendingInstall = pendingInstallRef.current;
-            if (!pendingInstall) return;
-            installWindowRef.current?.close();
-            installWindowRef.current = window.open("about:blank", "_blank");
-            installFetcher.submit(
-              {
-                intent: "checkThemeInstall",
-                widgetKey: pendingInstall.widgetKey,
-                appsWrapperConfirmed: "true"
-              },
-              { method: "post" }
-            );
-          }}
-          onClose={() => {
-            installWindowRef.current?.close();
-            installWindowRef.current = null;
-            setAppsWrapperTutorial(null);
-            pendingInstallRef.current = null;
-          }}
-        />
       </BlockStack>
     </Page>
   );
@@ -802,90 +722,14 @@ function BrandWidgetInstallInstructions({ widgetKey }: { widgetKey: BrandTrustWi
     <BlockStack gap="100">
       {widgetKey === "brandCarousel" ? (
         <Text as="p" tone="subdued">
-          Click <strong>Install</strong> to add this widget as an app section in the Theme Editor, or choose <strong>Manual install</strong> to place the code yourself.
+          Click <strong>Install</strong>. JSON themes open the Theme Editor; Legacy Liquid themes open the manual installation code.
         </Text>
       ) : (
         <Text as="p" tone="subdued">
-          Click <strong>Install</strong> to add this badge in the Theme Editor, or choose <strong>Manual install</strong> to place the code yourself.
+          Click <strong>Install</strong>. JSON themes open the Theme Editor; Legacy Liquid themes open the manual installation code.
         </Text>
       )}
     </BlockStack>
-  );
-}
-
-function AppsWrapperTutorialModal({
-  tutorial,
-  checking,
-  onCheckAgain,
-  onClose
-}: {
-  tutorial: AppsWrapperTutorial | null;
-  checking: boolean;
-  onCheckAgain: () => void;
-  onClose: () => void;
-}) {
-  const [copied, setCopied] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!tutorial) setCopied(false);
-  }, [tutorial]);
-
-  return (
-    <Modal
-      open={Boolean(tutorial)}
-      onClose={onClose}
-      title={tutorial ? `Enable app sections for ${tutorial.title}` : "Enable app sections"}
-      primaryAction={{
-        content: "I've saved it — check again",
-        onAction: onCheckAgain,
-        loading: checking
-      }}
-      secondaryActions={[{ content: "Close", onAction: onClose }]}
-    >
-      <Modal.Section>
-        <BlockStack gap="400">
-          <Banner title="One small theme file is required" tone="info">
-            <Text as="p">
-              This theme has a dynamic Liquid home page, but it does not yet include the Apps wrapper that lets Shopify place app sections on it. Add the file below, then continue the installation.
-            </Text>
-          </Banner>
-          <Box as="div" paddingInlineStart="400">
-            <ol style={{ margin: 0, paddingLeft: 18 }}>
-              <li>Click <strong>Copy apps.liquid code</strong>.</li>
-              <li>Open the current theme code editor.</li>
-              <li>Under <strong>Sections</strong>, create a new section named <strong>apps.liquid</strong>.</li>
-              <li>Replace its contents with the copied code and click <strong>Save</strong>.</li>
-              <li>Return here and click <strong>I've saved it — check again</strong>.</li>
-            </ol>
-          </Box>
-          <InlineStack gap="300" wrap>
-            <Button
-              variant="primary"
-              onClick={async () => {
-                await navigator.clipboard.writeText(APPS_WRAPPER_CODE);
-                setCopied(true);
-              }}
-            >
-              {copied ? "Code copied" : "Copy apps.liquid code"}
-            </Button>
-            {tutorial?.codeEditorUrl ? (
-              <Button url={tutorial.codeEditorUrl} target="_blank">Open theme code editor</Button>
-            ) : null}
-            {tutorial?.editorUrl ? (
-              <Button url={tutorial.editorUrl} target="_blank">Continue in Theme Editor</Button>
-            ) : null}
-          </InlineStack>
-          <Box background="bg-surface-secondary" borderRadius="200" padding="300">
-            <pre style={{ margin: 0, maxHeight: 320, overflow: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-              <code>{APPS_WRAPPER_CODE}</code>
-            </pre>
-          </Box>
-          <Text as="p" tone="subdued">
-            This creates a standard Apps wrapper only. It does not replace or modify any existing theme file.
-          </Text>
-        </BlockStack>
-      </Modal.Section>
-    </Modal>
   );
 }
 
@@ -1067,7 +911,7 @@ function isInstallWidgetKey(value: string): value is InstallWidgetKey {
 
 async function detectThemeInstallCapability(admin: {
   graphql: (query: string) => Promise<Response>;
-}, shopDomain: string, widgetKey: InstallWidgetKey, appsWrapperConfirmed = false): Promise<ThemeInstallCheckResponse> {
+}, widgetKey: InstallWidgetKey): Promise<ThemeInstallCheckResponse> {
   const response = await admin.graphql(`#graphql
     query CurrentThemeInstallCompatibility {
       themes(first: 1, roles: [MAIN]) {
@@ -1086,9 +930,6 @@ async function detectThemeInstallCapability(admin: {
           indexLiquid: files(first: 1, filenames: ["templates/index.liquid"]) {
             nodes { filename }
           }
-          appsLiquid: files(first: 1, filenames: ["sections/apps.liquid"]) {
-            nodes { filename }
-          }
         }
       }
     }
@@ -1105,7 +946,6 @@ async function detectThemeInstallCapability(admin: {
           productLiquid?: { nodes?: Array<{ filename?: string }> } | null;
           indexJson?: { nodes?: Array<{ filename?: string }> } | null;
           indexLiquid?: { nodes?: Array<{ filename?: string }> } | null;
-          appsLiquid?: { nodes?: Array<{ filename?: string }> } | null;
         }>;
       };
     };
@@ -1116,26 +956,21 @@ async function detectThemeInstallCapability(admin: {
   }
 
   const theme = payload.data?.themes?.nodes?.[0];
-  const themeId = theme?.id?.split("/").at(-1) || "current";
-  const codeEditorUrl = `https://${shopDomain}/admin/themes/${themeId}?key=sections/apps.liquid`;
   const productJsonExists = Boolean(theme?.productJson?.nodes?.length);
   const productLiquidExists = Boolean(theme?.productLiquid?.nodes?.length);
   const indexJsonExists = Boolean(theme?.indexJson?.nodes?.length);
   const indexLiquidExists = Boolean(theme?.indexLiquid?.nodes?.length);
-  const appsLiquidExists = Boolean(theme?.appsLiquid?.nodes?.length);
   let status: ThemeInstallStatus = "unknown";
 
   if (widgetKey === "reviewWidget" || widgetKey === "starRating") {
     status = productJsonExists ? "ready" : productLiquidExists ? "manual" : "unknown";
-  } else if (indexJsonExists || (indexLiquidExists && (appsLiquidExists || appsWrapperConfirmed))) {
+  } else if (indexJsonExists) {
     status = "ready";
-  } else if (indexLiquidExists && !appsLiquidExists) {
-    // The file-presence query above is deliberately the source of truth. Some
-    // shops reject the optional theme-file body field even though read_themes
-    // can list the files. In that case we must still guide a legacy theme that
-    // is missing sections/apps.liquid through the wrapper setup instead of
-    // incorrectly falling back to the generic "compatibility unknown" modal.
-    status = "needs_apps_wrapper";
+  } else if (indexLiquidExists) {
+    // Static Liquid templates cannot host top-level theme app blocks. An
+    // apps.liquid file is only a wrapper used by compatible JSON templates;
+    // creating that file does not turn index.liquid into a JSON template.
+    status = "manual";
   }
 
   return {
@@ -1145,7 +980,7 @@ async function detectThemeInstallCapability(admin: {
     widgetKey,
     status,
     themeName: theme?.name || "Published theme",
-    codeEditorUrl,
+    codeEditorUrl: "",
     error: "",
     message: "",
     brandProfile: null
