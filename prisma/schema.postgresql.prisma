@@ -195,6 +195,7 @@ model ProductReviewSettings {
   starRatingBadgeBorderColor String @default("#dfe3e8")
   starRatingBadgeBorderWidth Int   @default(1)
   starRatingBadgeBorderRadius Int  @default(8)
+  starRatingBadgeStarGap     Int   @default(2)
   starRatingBadgeHideNoReviewProduct Boolean @default(false)
   ratingBarColor           String   @default("#f5a623")
   ratingBarBackgroundColor String   @default("#eef0f2")

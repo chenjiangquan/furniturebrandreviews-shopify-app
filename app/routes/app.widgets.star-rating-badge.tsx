@@ -46,6 +46,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     starRatingBadgeBorderColor: color("borderColor", "#dfe3e8"),
     starRatingBadgeBorderWidth: number("borderWidth", 0, 4, 1),
     starRatingBadgeBorderRadius: number("borderRadius", 0, 24, 8),
+    starRatingBadgeStarGap: number("starGap", 0, 12, 2),
     starRatingBadgeHideNoReviewProduct: formData.get("hideNoReviewProduct") === "true"
   };
 
@@ -67,6 +68,7 @@ export default function StarRatingBadgeCustomize() {
   const [borderColor, setBorderColor] = React.useState(settings.starRatingBadgeBorderColor);
   const [borderWidth, setBorderWidth] = React.useState(settings.starRatingBadgeBorderWidth);
   const [radius, setRadius] = React.useState(settings.starRatingBadgeBorderRadius);
+  const [starGap, setStarGap] = React.useState(settings.starRatingBadgeStarGap);
   const [hideNoReviewProduct, setHideNoReviewProduct] = React.useState(settings.starRatingBadgeHideNoReviewProduct);
   const saving = fetcher.state !== "idle";
 
@@ -82,6 +84,8 @@ export default function StarRatingBadgeCustomize() {
                 {fetcher.data?.ok ? <Badge tone="success">Saved</Badge> : null}
               </InlineStack>
               <ColorField label="Star color" name="starColor" value={starColor} onChange={setStarColor} />
+              <input type="hidden" name="starGap" value={starGap} />
+              <RangeSlider label="Star gap" min={0} max={12} value={starGap} onChange={(value) => setStarGap(Number(value))} output />
               <ColorField label="Text color" name="textColor" value={textColor} onChange={setTextColor} />
               <ColorField label="Background color" name="backgroundColor" value={backgroundColor} onChange={setBackgroundColor} />
               <ColorField label="Border color" name="borderColor" value={borderColor} onChange={setBorderColor} />
@@ -103,7 +107,7 @@ export default function StarRatingBadgeCustomize() {
               <Badge tone="success">Installed</Badge>
             </InlineStack>
             <div style={{ display: "inline-flex", gap: 8, alignItems: "center", width: "fit-content", background: backgroundColor, border: `${borderWidth}px solid ${borderColor}`, borderRadius: radius, padding: "10px 14px", color: textColor }}>
-              <StarRatingPreview rating={4.7} starColor={starColor} />
+              <StarRatingPreview rating={4.7} starColor={starColor} starGap={starGap} />
               <strong>4.7</strong>
               <span>238 reviews</span>
             </div>
@@ -137,7 +141,7 @@ function ColorField({ label, name, value, onChange }: { label: string; name: str
   );
 }
 
-function StarRatingPreview({ rating, starColor }: { rating: number; starColor: string }) {
+function StarRatingPreview({ rating, starColor, starGap }: { rating: number; starColor: string; starGap: number }) {
   const normalizedRating = Math.max(0, Math.min(5, Number(rating) || 0));
   const size = 18;
   return (
@@ -145,7 +149,7 @@ function StarRatingPreview({ rating, starColor }: { rating: number; starColor: s
       {[1, 2, 3, 4, 5].map((item) => {
         const fill = Math.max(0, Math.min(1, normalizedRating - (item - 1))) * 100;
         return (
-          <span key={item} style={{ color: "#d8dde3", display: "inline-flex", height: size, lineHeight: 1, marginLeft: item === 1 ? 0 : 2, overflow: "hidden", position: "relative", width: size }}>
+          <span key={item} style={{ color: "#d8dde3", display: "inline-flex", height: size, lineHeight: 1, marginLeft: item === 1 ? 0 : starGap, overflow: "hidden", position: "relative", width: size }}>
             <RoundedStarIcon size={size} />
             <span aria-hidden="true" style={{ color: starColor, inset: 0, overflow: "hidden", position: "absolute", width: `${fill}%` }}>
               <span style={{ display: "inline-flex", height: size, width: size }}><RoundedStarIcon size={size} /></span>

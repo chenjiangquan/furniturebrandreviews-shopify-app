@@ -76,6 +76,7 @@
     showReviewerPhotos: true,
     hideNoReviewProduct: false,
     starRatingBadgeHideNoReviewProduct: false,
+    starRatingBadgeStarGap: 2,
     layoutType: "standard",
     carouselCardsPerRow: 3,
     carouselAutoSlide: false,
@@ -318,6 +319,7 @@
         borderColor: settings.starRatingBadgeBorderColor,
         borderWidth: settings.starRatingBadgeBorderWidth,
         borderRadius: settings.starRatingBadgeBorderRadius,
+        starGap: settings.starRatingBadgeStarGap,
         hideNoReviewProduct: settings.starRatingBadgeHideNoReviewProduct
       }
     };
@@ -345,6 +347,7 @@
       borderColor: widgetSettings.starRatingBadgeBorderColor,
       borderWidth: widgetSettings.starRatingBadgeBorderWidth,
       borderRadius: widgetSettings.starRatingBadgeBorderRadius,
+      starGap: widgetSettings.starRatingBadgeStarGap,
       hideNoReviewProduct: widgetSettings.starRatingBadgeHideNoReviewProduct
     };
     if (badge.hideNoReviewProduct && Number(data.reviewCount) === 0) {
@@ -357,7 +360,7 @@
       ...defaultProductSettings,
       starColor: badge.starColor || computedStyles.getPropertyValue("--fbr-star").trim() || defaultProductSettings.starColor,
       starSize: 18,
-      starGap: 2
+      starGap: Math.max(0, Math.min(12, Number(badge.starGap ?? 2)))
     };
     el.innerHTML = `
       <div class="fbr-row fbr-product-star-rating-badge" style="color:${escapeHtml(badge.textColor || "#202223")};background:${escapeHtml(badge.backgroundColor || "#ffffff")};border:${Number(badge.borderWidth) || 0}px solid ${escapeHtml(badge.borderColor || "#dfe3e8")};border-radius:${Math.max(0, Number(badge.borderRadius) || 0)}px;">

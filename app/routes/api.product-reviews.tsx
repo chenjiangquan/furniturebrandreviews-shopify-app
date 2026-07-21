@@ -90,6 +90,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         borderColor: settings.starRatingBadgeBorderColor,
         borderWidth: settings.starRatingBadgeBorderWidth,
         borderRadius: settings.starRatingBadgeBorderRadius,
+        starGap: settings.starRatingBadgeStarGap,
         hideNoReviewProduct: settings.starRatingBadgeHideNoReviewProduct
       }
     };
@@ -107,6 +108,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       borderColor: settings.starRatingBadgeBorderColor,
       borderWidth: settings.starRatingBadgeBorderWidth,
       borderRadius: settings.starRatingBadgeBorderRadius,
+      starGap: settings.starRatingBadgeStarGap,
       hideNoReviewProduct: settings.starRatingBadgeHideNoReviewProduct
     },
     widgetSettings: {
