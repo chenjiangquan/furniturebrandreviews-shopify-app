@@ -1356,6 +1356,10 @@
     watchLegacyFloatingBadges();
 
     document.querySelectorAll("[data-fbr-product-stars]").forEach(async (el) => {
+      // The public brand widget also uses `.fbr-widget`. Mark Shopify product
+      // widgets as claimed so that its loader cannot replace them with a
+      // missing-brand error while this widget is fetching review data.
+      el.dataset.fbrwReady = "true";
       if (el.dataset.fbrRendered === "true") return;
       el.dataset.fbrRendered = "true";
       const hasProductReviewWidget = Boolean(document.querySelector("[data-fbr-product-reviews]"));
@@ -1384,6 +1388,7 @@
     });
 
     document.querySelectorAll("[data-fbr-product-reviews]").forEach(async (el) => {
+      el.dataset.fbrwReady = "true";
       if (el.dataset.fbrRendered === "true") return;
       el.dataset.fbrRendered = "true";
       const url = productReviewUrl(el);

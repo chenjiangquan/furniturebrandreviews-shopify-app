@@ -875,6 +875,7 @@ function buildProductManualInstallCode(appUrl: string, widgetKey: string) {
 <div
   class="fbr-widget"
   ${dataAttribute}
+  data-fbrw-ready="true"
   data-api-base="/apps/fbr"
   data-shop="{{ shop.permanent_domain }}"
   data-product-id="{{ product.id }}"
