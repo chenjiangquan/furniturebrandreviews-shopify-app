@@ -518,6 +518,7 @@
     el.style.setProperty("--fbr-review-card-border-width", `${reviewCardBorderWidth}px`);
     el.style.setProperty("--fbr-button-radius", `${buttonBorderRadius}px`);
     el.style.setProperty("--fbr-button-border-color", settings.buttonBorderColor || defaultProductSettings.buttonBorderColor);
+    el.style.setProperty("--fbr-button-text-color", settings.buttonTextColor || defaultProductSettings.buttonTextColor);
     const widgetBorderWidth = Math.max(0, Math.min(3, Number(settings.widgetBorderWidth ?? defaultProductSettings.widgetBorderWidth)));
     const widgetBorderRadius = Math.max(0, Number(settings.widgetBorderRadius ?? defaultProductSettings.widgetBorderRadius));
     el.style.setProperty("--fbr-widget-border-width", `${widgetBorderWidth}px`);

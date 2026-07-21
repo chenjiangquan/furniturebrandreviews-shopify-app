@@ -674,7 +674,7 @@
   border: 1px solid var(--fbr-button-border-color, var(--fbr-primary));
   border-radius: var(--fbr-button-radius, var(--fbr-radius)) !important;
   background: var(--fbr-primary) !important;
-  color: #fff !important;
+  color: var(--fbr-button-text-color, #fff) !important;
   cursor: pointer;
   padding: 10px 14px;
   font: inherit;
