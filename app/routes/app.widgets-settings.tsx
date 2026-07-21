@@ -253,14 +253,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         error: error instanceof Error ? error.message : String(error)
       });
       return {
-        ok: false,
+        ok: true,
         id: "",
         intent: "checkThemeInstall" as const,
         widgetKey,
-        status: "unknown" as const,
+        status: "manual" as const,
         themeName: "Published theme",
         codeEditorUrl: "",
-        error: "The current theme could not be checked.",
+        error: "",
         message: "",
         brandProfile: null
       };
@@ -960,7 +960,9 @@ async function detectThemeInstallCapability(admin: {
   const productLiquidExists = Boolean(theme?.productLiquid?.nodes?.length);
   const indexJsonExists = Boolean(theme?.indexJson?.nodes?.length);
   const indexLiquidExists = Boolean(theme?.indexLiquid?.nodes?.length);
-  let status: ThemeInstallStatus = "unknown";
+  // Manual installation is the safe default. We only deep-link into the Theme
+  // Editor after positively confirming a compatible JSON template.
+  let status: ThemeInstallStatus = "manual";
 
   if (widgetKey === "reviewWidget" || widgetKey === "starRating") {
     status = productJsonExists ? "ready" : productLiquidExists ? "manual" : "unknown";
