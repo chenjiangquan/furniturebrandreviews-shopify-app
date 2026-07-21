@@ -615,7 +615,7 @@ function ProductReviewPreview({ settings }: { settings: WidgetSettings }) {
                   color: settings.textColor,
                   display: "grid",
                   gap: 56,
-                  gridTemplateColumns: "minmax(250px, 310px) minmax(520px, 1fr)",
+                  gridTemplateColumns: "minmax(240px, 3fr) minmax(0, 7fr)",
                   minWidth: 860,
                   padding: 22,
                   width: "100%"

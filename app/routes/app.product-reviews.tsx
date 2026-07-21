@@ -154,10 +154,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const id = String(form.get("id") || "");
 
   if (intent === "verifiedPurchase") {
-    await prisma.productReview.update({
-      where: { id },
+    await prisma.productReview.updateMany({
+      where: { id, shopDomain: session.shop },
       data: { verifiedPurchase: form.get("verifiedPurchase") === "on" }
     });
+  }
+
+  if (intent === "markAllVerified") {
+    const result = await prisma.productReview.updateMany({
+      where: { shopDomain: session.shop, verifiedPurchase: false },
+      data: { verifiedPurchase: true }
+    });
+    return { ok: true, intent: "markAllVerified", updatedCount: result.count };
   }
 
   if (intent === "imageHidden") {
@@ -263,6 +271,15 @@ export default function ProductReviews() {
     : perPage;
   const [showAddReview, setShowAddReview] = React.useState(false);
   const [importOpen, setImportOpen] = React.useState(false);
+  const [markAllVerifiedOpen, setMarkAllVerifiedOpen] = React.useState(false);
+  const markAllVerifiedFetcher = useFetcher();
+  const markAllVerifiedResult = markAllVerifiedFetcher.data as { ok?: boolean; intent?: string; updatedCount?: number } | undefined;
+
+  React.useEffect(() => {
+    if (markAllVerifiedResult?.ok && markAllVerifiedResult.intent === "markAllVerified") {
+      setMarkAllVerifiedOpen(false);
+    }
+  }, [markAllVerifiedResult]);
   const [searchValue, setSearchValue] = React.useState(params.get("q") || "");
   const searchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -322,12 +339,44 @@ export default function ProductReviews() {
       primaryAction={{ content: "Export", onAction: exportReviews }}
       secondaryActions={[
         { content: "Import", onAction: () => setImportOpen(true) },
-        { content: "Add review", onAction: () => setShowAddReview((open) => !open) }
+        { content: "Add review", onAction: () => setShowAddReview((open) => !open) },
+        { content: "Mark all as verified", onAction: () => setMarkAllVerifiedOpen(true) }
       ]}
     >
       <div style={{ paddingBottom: 80 }}>
       <BlockStack gap="400">
         <ImportReviewsModal open={importOpen} onClose={() => setImportOpen(false)} />
+        <Modal
+          open={markAllVerifiedOpen}
+          onClose={() => setMarkAllVerifiedOpen(false)}
+          title="Mark all reviews as verified?"
+          primaryAction={{
+            content: "Mark all as verified",
+            loading: markAllVerifiedFetcher.state !== "idle",
+            onAction: () => {
+              const formData = new FormData();
+              formData.set("intent", "markAllVerified");
+              markAllVerifiedFetcher.submit(formData, { method: "post" });
+            }
+          }}
+          secondaryActions={[{ content: "Cancel", onAction: () => setMarkAllVerifiedOpen(false) }]}
+        >
+          <Modal.Section>
+            <Text as="p">
+              This will mark every review in this store as a verified purchase, including reviews that are not shown by the current filters.
+            </Text>
+          </Modal.Section>
+        </Modal>
+
+        {markAllVerifiedResult?.ok && markAllVerifiedResult.intent === "markAllVerified" ? (
+          <Banner title="Reviews verified" tone="success">
+            <Text as="p">
+              {markAllVerifiedResult.updatedCount === 1
+                ? "1 review was marked as verified."
+                : `${markAllVerifiedResult.updatedCount || 0} reviews were marked as verified.`}
+            </Text>
+          </Banner>
+        ) : null}
 
         {!entitlements.isPro ? (
           <Banner title="Free plan monthly import usage" tone="info" action={{ content: "Upgrade to Pro", onAction: () => window.open(upgradeUrl, "_top") }}>

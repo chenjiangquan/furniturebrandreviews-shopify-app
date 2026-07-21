@@ -66,7 +66,7 @@
   align-items: start;
   display: grid;
   gap: clamp(28px, 4vw, 56px);
-  grid-template-columns: minmax(240px, 310px) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 3fr) minmax(0, 7fr);
 }
 
 .fbr-layout-sidebar .fbr-sidebar-panel {
