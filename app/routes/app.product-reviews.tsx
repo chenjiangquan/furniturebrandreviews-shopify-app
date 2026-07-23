@@ -279,7 +279,6 @@ export default function ProductReviews() {
   const optimisticPerPage = navigation.location
     ? Number(new URLSearchParams(navigation.location.search).get("perPage") || perPage)
     : perPage;
-  const [showAddReview, setShowAddReview] = React.useState(false);
   const [importOpen, setImportOpen] = React.useState(false);
   const [markAllVerifiedOpen, setMarkAllVerifiedOpen] = React.useState(false);
   const markAllVerifiedFetcher = useFetcher();
@@ -349,7 +348,6 @@ export default function ProductReviews() {
       primaryAction={{ content: "Export", onAction: exportReviews }}
       secondaryActions={[
         { content: "Import", onAction: () => setImportOpen(true) },
-        { content: "Add review", onAction: () => setShowAddReview((open) => !open) },
         {
           content: entitlements.isPro ? "Mark all as verified" : "Mark all as verified — Pro",
           onAction: () => entitlements.isPro
@@ -458,15 +456,6 @@ export default function ProductReviews() {
             </InlineStack>
           </div>
         </Card>
-
-        {showAddReview ? (
-          <Card>
-            <BlockStack gap="300">
-              <Text as="h2" variant="headingMd">Manual review</Text>
-              <ReviewFields busy={busy} />
-            </BlockStack>
-          </Card>
-        ) : null}
 
         {selectedView === "questions" ? (
           <QuestionsTable questions={questions} busy={busy} />
@@ -882,39 +871,6 @@ function ReviewFilterPopover() {
         />
       </Popover.Section>
     </Popover>
-  );
-}
-
-function ReviewFields({ busy }: { busy: boolean }) {
-  const [productId, setProductId] = React.useState("");
-  const [productHandle, setProductHandle] = React.useState("");
-  const [productTitle, setProductTitle] = React.useState("");
-  const [customerName, setCustomerName] = React.useState("");
-  const [customerEmail, setCustomerEmail] = React.useState("");
-  const [rating, setRating] = React.useState("5");
-  const [title, setTitle] = React.useState("");
-  const [content, setContent] = React.useState("");
-  const [imageUrl, setImageUrl] = React.useState("");
-  const [verifiedPurchase, setVerifiedPurchase] = React.useState(false);
-
-  return (
-    <Form method="post">
-      <input type="hidden" name="intent" value="create" />
-      <BlockStack gap="300">
-        <TextField label="Product ID" name="productId" value={productId} onChange={setProductId} autoComplete="off" />
-        <TextField label="Product handle" name="productHandle" value={productHandle} onChange={setProductHandle} autoComplete="off" />
-        <TextField label="Product title" name="productTitle" value={productTitle} onChange={setProductTitle} autoComplete="off" />
-        <TextField label="Customer name" name="customerName" value={customerName} onChange={setCustomerName} autoComplete="name" />
-        <TextField label="Customer email" name="customerEmail" value={customerEmail} onChange={setCustomerEmail} type="email" autoComplete="email" />
-        <TextField label="Rating" name="rating" value={rating} onChange={setRating} type="number" min={1} max={5} autoComplete="off" />
-        <TextField label="Title" name="title" value={title} onChange={setTitle} autoComplete="off" />
-        <TextField label="Review content" name="content" value={content} onChange={setContent} multiline={4} autoComplete="off" />
-        <TextField label="Image URL" name="imageUrl" value={imageUrl} onChange={setImageUrl} type="url" autoComplete="off" />
-        <input type="hidden" name="verifiedPurchase" value={verifiedPurchase ? "on" : ""} />
-        <Checkbox label="Verified purchase" checked={verifiedPurchase} onChange={setVerifiedPurchase} />
-        <Button submit variant="primary" disabled={busy}>Add review</Button>
-      </BlockStack>
-    </Form>
   );
 }
 
