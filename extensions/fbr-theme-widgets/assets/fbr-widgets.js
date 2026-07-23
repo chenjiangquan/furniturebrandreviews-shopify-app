@@ -421,8 +421,38 @@
   }
 
   function openProductReviewAncestors(target) {
-    target.closest("details")?.setAttribute("open", "");
+    const ancestors = [];
+    let ancestor = target.parentElement;
+    while (ancestor && ancestor !== document.body) {
+      ancestors.push(ancestor);
+      ancestor = ancestor.parentElement;
+    }
+
+    ancestors.reverse().forEach((container) => {
+      if (container.tagName === "DETAILS") container.setAttribute("open", "");
+
+      const style = window.getComputedStyle(container);
+      const hidden = container.hidden || container.getAttribute("aria-hidden") === "true" || style.display === "none";
+      if (!hidden || !container.id) return;
+
+      const escapedId = cssEscape(container.id);
+      const triggers = Array.from(document.querySelectorAll(
+        `a[href="#${escapedId}"], button[data-target="#${escapedId}"], [aria-controls="${escapedId}"], [data-tab="#${escapedId}"]`
+      ));
+      const trigger = triggers.find((item) => item.getClientRects().length > 0) || triggers[0];
+      trigger?.click();
+    });
+
     target.dispatchEvent(new CustomEvent("fbr:reveal-product-reviews", { bubbles: true }));
+  }
+
+  function waitForProductReviewTarget(target, callback, attempt = 0) {
+    const rect = target.getBoundingClientRect();
+    if ((rect.width > 0 && rect.height > 0) || attempt >= 80) {
+      callback();
+      return;
+    }
+    window.setTimeout(() => waitForProductReviewTarget(target, callback, attempt + 1), 50);
   }
 
   function scrollToProductReviews() {
@@ -430,13 +460,13 @@
     if (!target) return;
     const targetId = ensureProductReviewTargetId(target);
     openProductReviewAncestors(target);
-    window.requestAnimationFrame(() => {
+    waitForProductReviewTarget(target, () => window.requestAnimationFrame(() => {
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       const top = target.getBoundingClientRect().top + window.scrollY - stickyHeaderOffset() - 16;
       window.scrollTo({ top: Math.max(0, top), behavior: reduceMotion ? "auto" : "smooth" });
       if (window.history?.replaceState) window.history.replaceState(null, "", `#${targetId}`);
       target.focus({ preventScroll: true });
-    });
+    }));
   }
 
   function bindStarRatingNavigation() {
@@ -453,6 +483,9 @@
       if (!trigger || (event.key !== "Enter" && event.key !== " ")) return;
       event.preventDefault();
       scrollToProductReviews();
+    });
+    window.addEventListener("hashchange", () => {
+      if (window.location.hash === "#fbr-product-reviews") scrollToProductReviews();
     });
   }
 
@@ -1441,6 +1474,7 @@
     watchLegacyFloatingBadges();
     bindStarRatingNavigation();
     document.querySelectorAll("[data-fbr-product-reviews]").forEach(ensureProductReviewTargetId);
+    if (window.location.hash === "#fbr-product-reviews") window.setTimeout(scrollToProductReviews, 0);
 
     document.querySelectorAll("[data-fbr-product-stars]").forEach(async (el) => {
       // The public brand widget also uses `.fbr-widget`. Mark Shopify product
