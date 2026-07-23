@@ -452,6 +452,7 @@
       callback();
       return;
     }
+    if (attempt > 0 && attempt % 5 === 0) openProductReviewAncestors(target);
     window.setTimeout(() => waitForProductReviewTarget(target, callback, attempt + 1), 50);
   }
 
