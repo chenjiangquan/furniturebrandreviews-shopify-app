@@ -31,6 +31,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     starRatingBadgeBorderRadius: settings.starRatingBadgeBorderRadius,
     starRatingBadgeStarGap: settings.starRatingBadgeStarGap,
     starRatingBadgeHideNoReviewProduct: settings.starRatingBadgeHideNoReviewProduct,
+    starRatingBadgeScrollToReviews: settings.starRatingBadgeScrollToReviews,
     ratingBarColor: settings.ratingBarColor,
     ratingBarBackgroundColor: settings.ratingBarBackgroundColor,
     ratingBadgeBackgroundColor: settings.ratingBadgeBackgroundColor,

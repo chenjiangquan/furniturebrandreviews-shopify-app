@@ -47,7 +47,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     starRatingBadgeBorderWidth: number("borderWidth", 0, 4, 1),
     starRatingBadgeBorderRadius: number("borderRadius", 0, 24, 8),
     starRatingBadgeStarGap: number("starGap", 0, 12, 2),
-    starRatingBadgeHideNoReviewProduct: formData.get("hideNoReviewProduct") === "true"
+    starRatingBadgeHideNoReviewProduct: formData.get("hideNoReviewProduct") === "true",
+    starRatingBadgeScrollToReviews: formData.get("scrollToReviews") === "true"
   };
 
   await prisma.productReviewSettings.upsert({
@@ -70,6 +71,7 @@ export default function StarRatingBadgeCustomize() {
   const [radius, setRadius] = React.useState(settings.starRatingBadgeBorderRadius);
   const [starGap, setStarGap] = React.useState(settings.starRatingBadgeStarGap);
   const [hideNoReviewProduct, setHideNoReviewProduct] = React.useState(settings.starRatingBadgeHideNoReviewProduct);
+  const [scrollToReviews, setScrollToReviews] = React.useState(settings.starRatingBadgeScrollToReviews);
   const saving = fetcher.state !== "idle";
 
   return (
@@ -95,6 +97,8 @@ export default function StarRatingBadgeCustomize() {
               <RangeSlider label="Border radius" min={0} max={24} value={radius} onChange={(value) => setRadius(Number(value))} output />
               <input type="hidden" name="hideNoReviewProduct" value={String(hideNoReviewProduct)} />
               <Checkbox label="Hide no review product" checked={hideNoReviewProduct} onChange={setHideNoReviewProduct} />
+              <input type="hidden" name="scrollToReviews" value={String(scrollToReviews)} />
+              <Checkbox label="Click badge to scroll to Product Review Widget" checked={scrollToReviews} onChange={setScrollToReviews} />
               <Button submit variant="primary" loading={saving}>Save</Button>
             </BlockStack>
           </Card>

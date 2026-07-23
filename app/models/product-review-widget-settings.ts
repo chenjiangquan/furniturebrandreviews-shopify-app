@@ -16,6 +16,7 @@ export const defaultProductReviewWidgetSettings = {
   starRatingBadgeBorderRadius: 8,
   starRatingBadgeStarGap: 2,
   starRatingBadgeHideNoReviewProduct: false,
+  starRatingBadgeScrollToReviews: true,
   ratingBarColor: "#f5a623",
   ratingBarBackgroundColor: "#eef0f2",
   ratingBadgeBackgroundColor: "#fff7e6",

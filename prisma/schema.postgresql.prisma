@@ -197,6 +197,7 @@ model ProductReviewSettings {
   starRatingBadgeBorderRadius Int  @default(8)
   starRatingBadgeStarGap     Int   @default(2)
   starRatingBadgeHideNoReviewProduct Boolean @default(false)
+  starRatingBadgeScrollToReviews Boolean @default(true)
   ratingBarColor           String   @default("#f5a623")
   ratingBarBackgroundColor String   @default("#eef0f2")
   ratingBadgeBackgroundColor String @default("#fff7e6")

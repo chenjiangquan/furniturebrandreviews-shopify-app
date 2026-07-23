@@ -62,7 +62,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         borderWidth: settings.starRatingBadgeBorderWidth,
         borderRadius: settings.starRatingBadgeBorderRadius,
         starGap: settings.starRatingBadgeStarGap,
-        hideNoReviewProduct: settings.starRatingBadgeHideNoReviewProduct
+        hideNoReviewProduct: settings.starRatingBadgeHideNoReviewProduct,
+        scrollToReviews: settings.starRatingBadgeScrollToReviews
       }
     };
     writePublicWidgetCache(cacheKey, data);
@@ -80,7 +81,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       borderWidth: settings.starRatingBadgeBorderWidth,
       borderRadius: settings.starRatingBadgeBorderRadius,
       starGap: settings.starRatingBadgeStarGap,
-      hideNoReviewProduct: settings.starRatingBadgeHideNoReviewProduct
+      hideNoReviewProduct: settings.starRatingBadgeHideNoReviewProduct,
+      scrollToReviews: settings.starRatingBadgeScrollToReviews
     },
     widgetSettings: {
       ...widgetSettings,

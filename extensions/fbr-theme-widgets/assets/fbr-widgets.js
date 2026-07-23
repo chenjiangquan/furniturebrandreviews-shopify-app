@@ -77,6 +77,7 @@
     hideNoReviewProduct: false,
     starRatingBadgeHideNoReviewProduct: false,
     starRatingBadgeStarGap: 2,
+    starRatingBadgeScrollToReviews: true,
     layoutType: "standard",
     carouselCardsPerRow: 3,
     carouselAutoSlide: false,
@@ -320,7 +321,8 @@
         borderWidth: settings.starRatingBadgeBorderWidth,
         borderRadius: settings.starRatingBadgeBorderRadius,
         starGap: settings.starRatingBadgeStarGap,
-        hideNoReviewProduct: settings.starRatingBadgeHideNoReviewProduct
+        hideNoReviewProduct: settings.starRatingBadgeHideNoReviewProduct,
+        scrollToReviews: settings.starRatingBadgeScrollToReviews
       }
     };
   }
@@ -348,7 +350,8 @@
       borderWidth: widgetSettings.starRatingBadgeBorderWidth,
       borderRadius: widgetSettings.starRatingBadgeBorderRadius,
       starGap: widgetSettings.starRatingBadgeStarGap,
-      hideNoReviewProduct: widgetSettings.starRatingBadgeHideNoReviewProduct
+      hideNoReviewProduct: widgetSettings.starRatingBadgeHideNoReviewProduct,
+      scrollToReviews: widgetSettings.starRatingBadgeScrollToReviews
     };
     if (badge.hideNoReviewProduct && Number(data.reviewCount) === 0) {
       el.innerHTML = "";
@@ -369,6 +372,88 @@
         <span>(${data.reviewCount || 0} reviews)</span>
       </div>
     `;
+    syncStarRatingInteractivity(el, badge, Number(data.reviewCount) || 0);
+  }
+
+  function productReviewTarget() {
+    const targets = Array.from(document.querySelectorAll("[data-fbr-product-reviews]"));
+    return targets.find((target) => !target.hidden && window.getComputedStyle(target).display !== "none") || targets[0] || null;
+  }
+
+  function ensureProductReviewTargetId(target) {
+    if (!target) return "";
+    if (target.id) return target.id;
+    let id = "fbr-product-reviews";
+    let suffix = 2;
+    while (document.getElementById(id) && document.getElementById(id) !== target) {
+      id = `fbr-product-reviews-${suffix++}`;
+    }
+    target.id = id;
+    if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+    return id;
+  }
+
+  function syncStarRatingInteractivity(el, badge, reviewCount) {
+    const rating = el.querySelector(".fbr-product-star-rating-badge");
+    if (!rating) return;
+    const target = productReviewTarget();
+    const enabled = badge.scrollToReviews !== false && Boolean(target);
+    if (!enabled) return;
+    const targetId = ensureProductReviewTargetId(target);
+    rating.dataset.fbrScrollToReviews = "true";
+    rating.setAttribute("role", "link");
+    rating.setAttribute("tabindex", "0");
+    rating.setAttribute("aria-controls", targetId);
+    rating.setAttribute("aria-label", reviewCount === 1 ? "Read 1 product review" : `Read ${reviewCount} product reviews`);
+  }
+
+  function stickyHeaderOffset() {
+    const candidates = document.querySelectorAll("header, [data-sticky-header], .shopify-section-header-sticky, .header-wrapper");
+    let offset = 0;
+    candidates.forEach((candidate) => {
+      const style = window.getComputedStyle(candidate);
+      const rect = candidate.getBoundingClientRect();
+      if ((style.position === "fixed" || style.position === "sticky") && rect.height > 0 && rect.top <= 1 && rect.bottom > 0) {
+        offset = Math.max(offset, rect.bottom);
+      }
+    });
+    return offset;
+  }
+
+  function openProductReviewAncestors(target) {
+    target.closest("details")?.setAttribute("open", "");
+    target.dispatchEvent(new CustomEvent("fbr:reveal-product-reviews", { bubbles: true }));
+  }
+
+  function scrollToProductReviews() {
+    const target = productReviewTarget();
+    if (!target) return;
+    const targetId = ensureProductReviewTargetId(target);
+    openProductReviewAncestors(target);
+    window.requestAnimationFrame(() => {
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const top = target.getBoundingClientRect().top + window.scrollY - stickyHeaderOffset() - 16;
+      window.scrollTo({ top: Math.max(0, top), behavior: reduceMotion ? "auto" : "smooth" });
+      if (window.history?.replaceState) window.history.replaceState(null, "", `#${targetId}`);
+      target.focus({ preventScroll: true });
+    });
+  }
+
+  function bindStarRatingNavigation() {
+    if (document.documentElement.dataset.fbrStarNavigationBound === "true") return;
+    document.documentElement.dataset.fbrStarNavigationBound = "true";
+    document.addEventListener("click", (event) => {
+      const trigger = event.target.closest?.("[data-fbr-scroll-to-reviews='true']");
+      if (!trigger) return;
+      event.preventDefault();
+      scrollToProductReviews();
+    });
+    document.addEventListener("keydown", (event) => {
+      const trigger = event.target.closest?.("[data-fbr-scroll-to-reviews='true']");
+      if (!trigger || (event.key !== "Enter" && event.key !== " ")) return;
+      event.preventDefault();
+      scrollToProductReviews();
+    });
   }
 
   function renderCollectionProductStars(el, data, options) {
@@ -1354,6 +1439,8 @@
 
   function initFbrWidgets() {
     watchLegacyFloatingBadges();
+    bindStarRatingNavigation();
+    document.querySelectorAll("[data-fbr-product-reviews]").forEach(ensureProductReviewTargetId);
 
     document.querySelectorAll("[data-fbr-product-stars]").forEach(async (el) => {
       // The public brand widget also uses `.fbr-widget`. Mark Shopify product
