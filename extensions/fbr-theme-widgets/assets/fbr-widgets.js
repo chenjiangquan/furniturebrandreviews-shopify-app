@@ -433,9 +433,15 @@
 
       const style = window.getComputedStyle(container);
       const hidden = container.hidden || container.getAttribute("aria-hidden") === "true" || style.display === "none";
-      if (!hidden || !container.id) return;
+      if (!hidden) return;
 
-      const escapedId = cssEscape(container.id);
+      let controlledContainer = container;
+      while (controlledContainer && !controlledContainer.id && controlledContainer !== document.body) {
+        controlledContainer = controlledContainer.parentElement;
+      }
+      if (!controlledContainer?.id) return;
+
+      const escapedId = cssEscape(controlledContainer.id);
       const triggers = Array.from(document.querySelectorAll(
         `a[href="#${escapedId}"], button[data-target="#${escapedId}"], [aria-controls="${escapedId}"], [data-tab="#${escapedId}"]`
       ));
