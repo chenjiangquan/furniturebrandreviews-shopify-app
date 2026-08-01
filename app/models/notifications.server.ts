@@ -172,6 +172,27 @@ export async function sendQuestionNotification(shopDomain: string, question: Pro
   }
 }
 
+export async function sendQuestionAnswerNotification(shopDomain: string, question: ProductQuestion) {
+  try {
+    const to = firstEmail(question.customerEmail);
+    const answer = String(question.answer || "").trim();
+    if (!to || !answer) return false;
+
+    const shop = await getShopForNotification(shopDomain);
+    const product = question.productTitle || question.productHandle || question.productId;
+
+    await sendEmail({
+      to,
+      subject: `Your question has been answered: ${product}`,
+      html: questionAnswerEmailTemplate(shop, question)
+    });
+    return true;
+  } catch (error) {
+    console.error("Failed to send question answer notification email", error);
+    return false;
+  }
+}
+
 export async function sendTestNotificationEmail(shopDomain: string) {
   const shop = await getShopForNotification(shopDomain);
   const to = notificationRecipient(shop);
@@ -356,6 +377,40 @@ function questionEmailTemplate(shop: Shop, question: ProductQuestion) {
   });
 }
 
+function questionAnswerEmailTemplate(shop: Shop, question: ProductQuestion) {
+  const storeName = shop.storeName || shop.shopDomain;
+  const product = question.productTitle || question.productHandle || question.productId;
+  return baseEmailTemplate({
+    eyebrow: "Your product question",
+    heading: "Your question has been answered",
+    intro: `${storeName} replied to your question about ${product}.`,
+    shopDomain: shop.shopDomain,
+    ctaUrl: storefrontProductQuestionUrl(shop.shopDomain, question.productHandle),
+    ctaLabel: "View the answer",
+    footerText: `You received this email because you submitted a product question to ${storeName}.`,
+    content: `
+      <div style="background:#f8faf9;border:1px solid #dde5e1;border-radius:14px;padding:18px;margin:18px 0;">
+        <div style="font-size:13px;line-height:20px;color:#667085;margin-bottom:6px;">Your question</div>
+        <p style="font-size:16px;line-height:25px;color:#101828;margin:0;font-weight:600;">${escapeHtml(question.question)}</p>
+      </div>
+      <div style="background:#ffffff;border:1px solid #dde5e1;border-radius:14px;padding:18px;margin:18px 0;">
+        <div style="font-size:13px;line-height:20px;color:#667085;margin-bottom:6px;">Answer from ${escapeHtml(storeName)}</div>
+        <p style="font-size:16px;line-height:25px;color:#344054;margin:0;font-weight:400;">${escapeHtml(question.answer || "")}</p>
+      </div>
+      ${infoRows([
+        ["Product", product],
+        ["Store", storeName]
+      ])}
+    `
+  });
+}
+
+function storefrontProductQuestionUrl(shopDomain: string, productHandle?: string | null) {
+  const storefrontUrl = `https://${shopDomain}`;
+  if (!productHandle) return storefrontUrl;
+  return `${storefrontUrl}/products/${encodeURIComponent(productHandle)}#fbr-product-reviews`;
+}
+
 function baseEmailTemplate(input: {
   eyebrow: string;
   heading: string;
@@ -364,6 +419,7 @@ function baseEmailTemplate(input: {
   shopDomain: string;
   ctaUrl?: string;
   ctaLabel?: string;
+  footerText?: string;
 }) {
   const adminUrl = input.ctaUrl || adminProductReviewsUrl(input.shopDomain);
   const ctaLabel = input.ctaLabel || "Open Product Reviews";
@@ -389,13 +445,13 @@ function baseEmailTemplate(input: {
                   <p style="font-size:15px;line-height:24px;color:#475467;margin:0 0 18px;">${escapeHtml(input.intro)}</p>
                   ${input.content}
                   <div style="margin-top:24px;">
-                    <a href="${adminUrl}" style="display:inline-block;background:#1f6f64;color:#ffffff;text-decoration:none;font-size:15px;line-height:20px;font-weight:700;padding:12px 18px;border-radius:10px;">${escapeHtml(ctaLabel)}</a>
+                    <a href="${escapeHtml(adminUrl)}" style="display:inline-block;background:#1f6f64;color:#ffffff;text-decoration:none;font-size:15px;line-height:20px;font-weight:700;padding:12px 18px;border-radius:10px;">${escapeHtml(ctaLabel)}</a>
                   </div>
                 </td>
               </tr>
               <tr>
                 <td style="padding:18px 4px 0;text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:20px;color:#667085;">
-                  FurnitureBrandReviews.com · Manage notification settings in your Shopify app
+                  ${escapeHtml(input.footerText || "FurnitureBrandReviews.com · Manage notification settings in your Shopify app")}
                 </td>
               </tr>
             </table>

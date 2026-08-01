@@ -22,7 +22,7 @@ import {
 import prisma from "~/db.server";
 import { clearPublicWidgetCache } from "~/models/public-widget-cache.server";
 import { adminLoaderCacheKey, cachedAdminLoader, invalidateAdminLoaderCache } from "~/models/admin-loader-cache.server";
-import { sendAppOwnerImportNotification } from "~/models/notifications.server";
+import { sendAppOwnerImportNotification, sendQuestionAnswerNotification } from "~/models/notifications.server";
 import {
   buildShopifyPlanSelectionUrl,
   currentPlanMonthKey,
@@ -216,13 +216,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "questionAnswer") {
     const answer = String(form.get("answer") || "").trim();
-    await prisma.productQuestion.update({
+    const question = await prisma.productQuestion.findFirst({
+      where: { id, shopDomain: session.shop }
+    });
+    if (!question) return { ok: false, error: "Question not found." };
+
+    const updatedQuestion = await prisma.productQuestion.update({
       where: { id },
       data: {
         answer,
-        answeredAt: answer ? new Date() : null
+        answeredAt: answer ? question.answeredAt || new Date() : null
       }
     });
+    clearPublicWidgetCache(session.shop);
+
+    if (answer && question.customerEmail && !question.answerNotifiedAt) {
+      const customerNotified = await sendQuestionAnswerNotification(session.shop, updatedQuestion);
+      if (customerNotified) {
+        await prisma.productQuestion.updateMany({
+          where: { id, shopDomain: session.shop, answerNotifiedAt: null },
+          data: { answerNotifiedAt: new Date() }
+        });
+      }
+    }
   }
 
   if (intent === "questionDelete") {
@@ -796,6 +812,13 @@ function QuestionAnswerModal({ question, open, onClose }: { question: any; open:
             multiline={5}
             autoComplete="off"
           />
+          <Text as="p" tone="subdued">
+            {!question.customerEmail
+              ? "This customer did not provide an email address, so an answer notification cannot be sent."
+              : question.answerNotifiedAt
+                ? "The customer was notified when the first answer was saved. Editing this answer will not send another email."
+                : `Saving the first answer will email ${question.customerEmail}.`}
+          </Text>
         </BlockStack>
       </Modal.Section>
     </Modal>
