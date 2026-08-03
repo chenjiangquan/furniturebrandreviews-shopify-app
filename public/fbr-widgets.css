@@ -448,9 +448,9 @@
   min-height: 28px !important;
   min-width: 28px !important;
   opacity: 0.72;
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  position: absolute !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
   transition: opacity 140ms ease, background 140ms ease, box-shadow 140ms ease;
   padding: 0 !important;
   width: 28px !important;
@@ -525,6 +525,12 @@
   max-width: min(920px, calc(100vw - 40px));
   padding: 14px;
   position: relative;
+  width: fit-content;
+}
+
+.fbr-modal-backdrop[data-fbr-image-lightbox] {
+  align-items: center;
+  justify-content: center;
 }
 
 .fbr-image-lightbox .fbr-modal-close {
@@ -536,12 +542,15 @@
 .fbr-image-lightbox img {
   border-radius: 8px;
   display: block;
-  max-height: calc(100vh - 120px);
-  max-width: 100%;
-  object-fit: contain;
+  height: auto !important;
+  margin: 0 auto !important;
+  max-height: 65vh !important;
+  max-width: min(892px, calc(100vw - 68px)) !important;
+  object-fit: contain !important;
+  width: auto !important;
 }
 
-.fbr-widget button.fbr-image-lightbox-arrow {
+.fbr-image-lightbox button.fbr-image-lightbox-arrow {
   align-items: center;
   appearance: none;
   background: rgba(255, 255, 255, 0.9) !important;
@@ -557,6 +566,7 @@
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
+  z-index: 2;
   line-height: 1 !important;
   margin: 0 !important;
   max-height: 40px !important;
@@ -567,9 +577,9 @@
   width: 40px !important;
 }
 
-.fbr-widget button.fbr-image-lightbox-arrow:hover,
-.fbr-widget button.fbr-image-lightbox-arrow:focus,
-.fbr-widget button.fbr-image-lightbox-arrow:active {
+.fbr-image-lightbox button.fbr-image-lightbox-arrow:hover,
+.fbr-image-lightbox button.fbr-image-lightbox-arrow:focus,
+.fbr-image-lightbox button.fbr-image-lightbox-arrow:active {
   background: rgba(255, 255, 255, 0.96) !important;
   border: 0 !important;
   color: #202223 !important;
@@ -593,20 +603,20 @@
 }
 
 .fbr-image-lightbox-prev {
-  left: 16px;
+  left: 18px !important;
 }
 
 .fbr-image-lightbox-next {
-  right: 16px;
+  right: 18px !important;
 }
 
 @media (max-width: 749px) {
   .fbr-image-lightbox-prev {
-    left: 12px;
+    left: 18px !important;
   }
 
   .fbr-image-lightbox-next {
-    right: 12px;
+    right: 18px !important;
   }
 }
 
