@@ -200,6 +200,26 @@
     });
   }
 
+  function removeVisibleLegacyReviewSchemaText() {
+    document.querySelectorAll("#shopify-product-reviews").forEach((container) => {
+      Array.from(container.childNodes).forEach((node) => {
+        if (node.nodeType !== Node.TEXT_NODE) return;
+        const text = String(node.textContent || "").trim();
+        if (!text.startsWith("{") || !text.includes("AggregateRating")) return;
+        try {
+          const schema = JSON.parse(text);
+          const rawType = schema && schema["@type"];
+          const types = Array.isArray(rawType) ? rawType : [rawType];
+          if (types.some((type) => String(type || "").toLowerCase() === "aggregaterating")) {
+            node.remove();
+          }
+        } catch {
+          // Leave unrelated or malformed theme content untouched.
+        }
+      });
+    });
+  }
+
   function applyProductReviewSeo(el, data) {
     if (!data || !data.seoRichSnippetsEnabled) {
       restoreProductReviewSeo();
@@ -1478,6 +1498,7 @@
   }
 
   function initFbrWidgets() {
+    removeVisibleLegacyReviewSchemaText();
     watchLegacyFloatingBadges();
     bindStarRatingNavigation();
     document.querySelectorAll("[data-fbr-product-reviews]").forEach(ensureProductReviewTargetId);
