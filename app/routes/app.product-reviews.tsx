@@ -183,6 +183,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       where: { id, shopDomain: session.shop },
       data: { imageHidden: form.get("imageHidden") === "on" }
     });
+    clearPublicWidgetCache(session.shop);
+  }
+
+  if (intent === "deleteImage") {
+    const result = await prisma.productReview.updateMany({
+      where: { id, shopDomain: session.shop },
+      data: { imageUrl: null, imageHidden: false }
+    });
+    if (result.count === 0) return { ok: false, error: "Review not found." };
+    clearPublicWidgetCache(session.shop);
   }
 
   if (intent === "reply") {
@@ -278,7 +288,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
-  if (["verifiedPurchase", "imageHidden", "reply", "delete", "importCsv", "questionStatus", "questionAnswer", "questionDelete"].includes(intent)) {
+  if (["verifiedPurchase", "imageHidden", "deleteImage", "reply", "delete", "importCsv", "questionStatus", "questionAnswer", "questionDelete"].includes(intent)) {
     return { ok: true };
   }
 
@@ -513,11 +523,18 @@ function ReviewRow({ review, busy }: { review: any; busy: boolean }) {
   const fetcher = useFetcher();
   const [replyOpen, setReplyOpen] = React.useState(false);
   const [imagePreviewOpen, setImagePreviewOpen] = React.useState(false);
+  const [deleteImageOpen, setDeleteImageOpen] = React.useState(false);
   const submitIntent = (intent: string) => {
     const formData = new FormData();
     formData.set("intent", intent);
     formData.set("id", review.id);
     fetcher.submit(formData, { method: "post" });
+  };
+
+  const deleteImage = () => {
+    setImagePreviewOpen(false);
+    setDeleteImageOpen(false);
+    submitIntent("deleteImage");
   };
 
   return (
@@ -601,8 +618,31 @@ function ReviewRow({ review, busy }: { review: any; busy: boolean }) {
         {review.imageUrl ? <HideReviewImageControl review={review} /> : null}
         <InlineStack gap="200">
           <Button size="micro" onClick={() => setReplyOpen(true)}>{review.merchantReply ? "Edit reply" : "Reply"}</Button>
+          {review.imageUrl ? (
+            <Button size="micro" tone="critical" disabled={busy || fetcher.state !== "idle"} onClick={() => setDeleteImageOpen(true)}>
+              Delete image
+            </Button>
+          ) : null}
           <Button size="micro" tone="critical" disabled={busy} onClick={() => submitIntent("delete")}>Delete</Button>
         </InlineStack>
+        <Modal
+          open={deleteImageOpen}
+          onClose={() => setDeleteImageOpen(false)}
+          title="Delete review image?"
+          primaryAction={{
+            content: "Delete image",
+            destructive: true,
+            loading: fetcher.state !== "idle",
+            onAction: deleteImage
+          }}
+          secondaryActions={[{ content: "Cancel", onAction: () => setDeleteImageOpen(false) }]}
+        >
+          <Modal.Section>
+            <Text as="p">
+              This permanently removes the customer image. The rating, title, review content, customer details, and merchant reply will be kept.
+            </Text>
+          </Modal.Section>
+        </Modal>
       </BlockStack>
     </div>
   );
