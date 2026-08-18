@@ -5,6 +5,8 @@ import {
   corsJson,
   createProductReview,
   getProductReviewPublicBundle,
+  getProductReviewPublicRatingBundle,
+  getProductReviewRatingSummary,
   getProductReviewWidgetSettings,
   getProductReviewSummary,
   requiredString
@@ -12,45 +14,52 @@ import {
 import { isFreeProShop } from "~/shopify.server";
 import {
   clearPublicWidgetCache,
+  coalescePublicWidgetLoad,
   publicWidgetCacheKey,
   readPublicWidgetCache,
+  readStalePublicWidgetCache,
   writePublicWidgetCache
 } from "~/models/public-widget-cache.server";
 
 const publicCacheHeaders = {
-  "Cache-Control": "no-store, max-age=0",
-  "CDN-Cache-Control": "no-store",
-  "Vercel-CDN-Cache-Control": "no-store"
+  "Cache-Control": "public, max-age=0, s-maxage=30, stale-while-revalidate=300",
+  "CDN-Cache-Control": "public, s-maxage=30, stale-while-revalidate=300",
+  "Vercel-CDN-Cache-Control": "public, s-maxage=30, stale-while-revalidate=300"
 };
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  if (request.method === "OPTIONS") return corsJson({});
+function isPrismaPoolTimeout(error: unknown) {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2024");
+}
 
-  const url = new URL(request.url);
-  const shop = requiredString(url.searchParams.get("shop"), "shop");
-  const productId = String(url.searchParams.get("productId") || "").trim();
-  const productHandle = String(url.searchParams.get("productHandle") || "").trim();
-  const productTitle = String(url.searchParams.get("productTitle") || "").trim();
-  if (!productId && !productHandle && !productTitle) {
-    throw new Response("productId, productHandle, or productTitle is required.", { status: 400 });
+async function withPoolTimeoutRetry<T>(load: () => Promise<T>) {
+  try {
+    return await load();
+  } catch (error) {
+    if (!isPrismaPoolTimeout(error)) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 150 + Math.floor(Math.random() * 150)));
+    return load();
   }
-  const summaryOnly = url.searchParams.get("summaryOnly") === "1";
-  const cacheKey = publicWidgetCacheKey(shop, productId, productHandle, productTitle, summaryOnly);
-  const cachedData = readPublicWidgetCache(cacheKey);
-  if (cachedData) return corsJson(cachedData, { headers: publicCacheHeaders });
+}
 
-  const bundle = await getProductReviewPublicBundle(shop, productId, productHandle, productTitle);
-  const settings = bundle.settings || await getProductReviewWidgetSettings(shop);
-  const entitlements = isFreeProShop(shop)
-    ? { isPro: true }
-    : { isPro: bundle.plan === "PRO" };
-  let summary = bundle.summary;
-  if (summary.reviewCount === 0 && (productHandle || productTitle)) {
-    summary = await getProductReviewSummary(shop, productId, productHandle, productTitle);
-  }
-
+async function loadPublicWidgetData(
+  shop: string,
+  productId: string,
+  productHandle: string,
+  productTitle: string,
+  summaryOnly: boolean
+) {
   if (summaryOnly) {
-    const data = {
+    const bundle = await getProductReviewPublicRatingBundle(shop, productId, productHandle, productTitle);
+    const settings = bundle.settings || await getProductReviewWidgetSettings(shop);
+    const entitlements = isFreeProShop(shop)
+      ? { isPro: true }
+      : { isPro: bundle.plan === "PRO" };
+    let summary = bundle.summary;
+    if (summary.reviewCount === 0 && (productHandle || productTitle)) {
+      summary = await getProductReviewRatingSummary(shop, productId, productHandle, productTitle);
+    }
+
+    return {
       averageRating: summary.averageRating,
       reviewCount: summary.reviewCount,
       seoRichSnippetsEnabled: entitlements.isPro && bundle.seoRichSnippetsEnabled,
@@ -66,11 +75,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         scrollToReviews: settings.starRatingBadgeScrollToReviews
       }
     };
-    writePublicWidgetCache(cacheKey, data);
-    return corsJson(data, { headers: publicCacheHeaders });
   }
+
+  const bundle = await getProductReviewPublicBundle(shop, productId, productHandle, productTitle);
+  const settings = bundle.settings || await getProductReviewWidgetSettings(shop);
+  const entitlements = isFreeProShop(shop)
+    ? { isPro: true }
+    : { isPro: bundle.plan === "PRO" };
+  let summary = bundle.summary;
+  if (summary.reviewCount === 0 && (productHandle || productTitle)) {
+    summary = await getProductReviewSummary(shop, productId, productHandle, productTitle);
+  }
+
   const { id, shopDomain, createdAt, updatedAt, ...widgetSettings } = settings;
-  const data = {
+  return {
     ...summary,
     seoRichSnippetsEnabled: entitlements.isPro && bundle.seoRichSnippetsEnabled,
     starRatingBadgeSettings: {
@@ -89,8 +107,41 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       layoutType: entitlements.isPro ? widgetSettings.layoutType : "standard"
     }
   };
-  writePublicWidgetCache(cacheKey, data);
-  return corsJson(data, { headers: publicCacheHeaders });
+}
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  if (request.method === "OPTIONS") return corsJson({});
+
+  const url = new URL(request.url);
+  const shop = requiredString(url.searchParams.get("shop"), "shop");
+  const productId = String(url.searchParams.get("productId") || "").trim();
+  const productHandle = String(url.searchParams.get("productHandle") || "").trim();
+  const productTitle = String(url.searchParams.get("productTitle") || "").trim();
+  if (!productId && !productHandle && !productTitle) {
+    throw new Response("productId, productHandle, or productTitle is required.", { status: 400 });
+  }
+  const summaryOnly = url.searchParams.get("summaryOnly") === "1";
+  const cacheKey = publicWidgetCacheKey(shop, productId, productHandle, productTitle, summaryOnly);
+  const cachedData = readPublicWidgetCache(cacheKey);
+  if (cachedData) return corsJson(cachedData, { headers: publicCacheHeaders });
+
+  try {
+    const data = await coalescePublicWidgetLoad(cacheKey, () =>
+      withPoolTimeoutRetry(() =>
+        loadPublicWidgetData(shop, productId, productHandle, productTitle, summaryOnly)
+      )
+    );
+    writePublicWidgetCache(cacheKey, data);
+    return corsJson(data, { headers: publicCacheHeaders });
+  } catch (error) {
+    const staleData = isPrismaPoolTimeout(error) ? readStalePublicWidgetCache(cacheKey) : null;
+    if (staleData) {
+      return corsJson(staleData, {
+        headers: { ...publicCacheHeaders, "X-FBR-Cache": "stale-if-error" }
+      });
+    }
+    throw error;
+  }
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {

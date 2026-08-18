@@ -180,25 +180,26 @@ export async function getProductReviewSummary(
     questionMatchFilters.push({ productTitle });
   }
 
-  const [directPublishedReviews, questions] = await Promise.all([
-    prisma.productReview.findMany({
-      where: {
-        shopDomain,
-        status: { in: publishedReviewStatuses },
-        ...(reviewMatchFilters.length ? { OR: reviewMatchFilters } : { id: "__no_product_match__" })
-      },
-      orderBy: { createdAt: "desc" }
-    }),
-    prisma.productQuestion.findMany({
-      where: {
-        shopDomain,
-        status: "PUBLISHED",
-        ...(questionMatchFilters.length ? { OR: questionMatchFilters } : { id: "__no_product_match__" })
-      },
-      orderBy: { createdAt: "desc" },
-      take: 25
-    })
-  ]);
+  // The production Prisma pool intentionally starts at one connection per
+  // serverless instance. Keep these fallback reads serial so the second query
+  // does not wait in Prisma's queue and trigger P2024 during a slow review read.
+  const directPublishedReviews = await prisma.productReview.findMany({
+    where: {
+      shopDomain,
+      status: { in: publishedReviewStatuses },
+      ...(reviewMatchFilters.length ? { OR: reviewMatchFilters } : { id: "__no_product_match__" })
+    },
+    orderBy: { createdAt: "desc" }
+  });
+  const questions = await prisma.productQuestion.findMany({
+    where: {
+      shopDomain,
+      status: "PUBLISHED",
+      ...(questionMatchFilters.length ? { OR: questionMatchFilters } : { id: "__no_product_match__" })
+    },
+    orderBy: { createdAt: "desc" },
+    take: 25
+  });
   const titleFallbackReviews = directPublishedReviews.length === 0 && (normalizedCurrentTitle || currentTokens.length > 0)
     ? await prisma.productReview.findMany({
         where: {
@@ -238,6 +239,70 @@ type PublicProductReviewBundleRow = {
   seoRichSnippetsEnabled: boolean | null;
   plan: string | null;
 };
+
+type PublicProductReviewRatingBundleRow = {
+  averageRating: number | string | null;
+  reviewCount: bigint | number | string;
+  settings: Awaited<ReturnType<typeof getProductReviewWidgetSettings>> | null;
+  seoRichSnippetsEnabled: boolean | null;
+  plan: string | null;
+};
+
+/**
+ * Loads only the aggregate needed by the star badge. Keeping this separate
+ * prevents summary-only storefront requests from reading every review row and
+ * potentially large image payloads.
+ */
+export async function getProductReviewPublicRatingBundle(
+  shopDomain: string,
+  productId: string,
+  productHandle = "",
+  productTitle = ""
+) {
+  const reviewMatches: Prisma.Sql[] = [];
+  if (productId) reviewMatches.push(Prisma.sql`r."productId" = ${productId}`);
+  if (productHandle) reviewMatches.push(Prisma.sql`r."productHandle" = ${productHandle}`);
+  if (productTitle) reviewMatches.push(Prisma.sql`r."productTitle" = ${productTitle}`);
+
+  const reviewWhere = reviewMatches.length
+    ? Prisma.sql`(${Prisma.join(reviewMatches, " OR ")})`
+    : Prisma.sql`FALSE`;
+  const statuses = Prisma.join(publishedReviewStatuses);
+  const rows = await prisma.$queryRaw<PublicProductReviewRatingBundleRow[]>(Prisma.sql`
+    SELECT
+      review_stats."averageRating",
+      review_stats."reviewCount",
+      (SELECT to_jsonb(settings_row) FROM "ProductReviewSettings" settings_row WHERE settings_row."shopDomain" = ${shopDomain}) AS settings,
+      (SELECT seo."seoRichSnippetsEnabled" FROM "GoogleSeoSettings" seo WHERE seo."shopDomain" = ${shopDomain}) AS "seoRichSnippetsEnabled",
+      (SELECT subscription."plan" FROM "SubscriptionSettings" subscription WHERE subscription."shopDomain" = ${shopDomain}) AS plan
+    FROM (
+      SELECT
+        COALESCE(AVG(r."rating"), 0) AS "averageRating",
+        COUNT(*) AS "reviewCount"
+      FROM "ProductReview" r
+      WHERE r."shopDomain" = ${shopDomain}
+        AND r."status" IN (${statuses})
+        AND ${reviewWhere}
+    ) review_stats
+  `);
+  const row = rows[0] || {
+    averageRating: 0,
+    reviewCount: 0,
+    settings: null,
+    seoRichSnippetsEnabled: false,
+    plan: null
+  };
+
+  return {
+    summary: {
+      averageRating: Number(Number(row.averageRating || 0).toFixed(1)),
+      reviewCount: Number(row.reviewCount || 0)
+    },
+    settings: row.settings,
+    seoRichSnippetsEnabled: Boolean(row.seoRichSnippetsEnabled),
+    plan: row.plan
+  };
+}
 
 /**
  * Loads the public widget payload in one database round trip. The storefront
