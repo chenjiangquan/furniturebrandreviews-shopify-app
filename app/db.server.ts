@@ -20,7 +20,9 @@ function databaseUrlForPrisma() {
     if (isSupabasePooler) {
       url.searchParams.set("pgbouncer", "true");
       url.searchParams.set("connection_limit", url.searchParams.get("connection_limit") || "1");
-      url.searchParams.set("pool_timeout", url.searchParams.get("pool_timeout") || "20");
+      // Fail fast enough for the public widget route to serve stale data
+      // instead of letting many serverless requests queue for 20 seconds.
+      url.searchParams.set("pool_timeout", "8");
     }
 
     return url.toString();

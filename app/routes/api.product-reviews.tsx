@@ -26,19 +26,26 @@ const publicCacheHeaders = {
   "CDN-Cache-Control": "public, s-maxage=30, stale-while-revalidate=300",
   "Vercel-CDN-Cache-Control": "public, s-maxage=30, stale-while-revalidate=300"
 };
+const STALE_REVALIDATE_WAIT_MS = 750;
 
 function isPrismaPoolTimeout(error: unknown) {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2024");
 }
 
-async function withPoolTimeoutRetry<T>(load: () => Promise<T>) {
+async function withPoolTimeoutRetry<T>(load: () => Promise<T>, allowRetry: boolean) {
   try {
     return await load();
   } catch (error) {
-    if (!isPrismaPoolTimeout(error)) throw error;
+    if (!allowRetry || !isPrismaPoolTimeout(error)) throw error;
     await new Promise((resolve) => setTimeout(resolve, 150 + Math.floor(Math.random() * 150)));
     return load();
   }
+}
+
+function staleResponse(data: Record<string, unknown>, reason: string) {
+  return corsJson(data, {
+    headers: { ...publicCacheHeaders, "X-FBR-Cache": reason }
+  });
 }
 
 async function loadPublicWidgetData(
@@ -125,23 +132,42 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const cachedData = readPublicWidgetCache(cacheKey);
   if (cachedData) return corsJson(cachedData, { headers: publicCacheHeaders });
 
-  try {
-    const data = await coalescePublicWidgetLoad(cacheKey, () =>
-      withPoolTimeoutRetry(() =>
-        loadPublicWidgetData(shop, productId, productHandle, productTitle, summaryOnly)
-      )
-    );
+  const staleData = readStalePublicWidgetCache(cacheKey);
+  const loadPromise = coalescePublicWidgetLoad(cacheKey, () =>
+    withPoolTimeoutRetry(
+      () => loadPublicWidgetData(shop, productId, productHandle, productTitle, summaryOnly),
+      !staleData
+    )
+  ).then((data) => {
     writePublicWidgetCache(cacheKey, data);
-    return corsJson(data, { headers: publicCacheHeaders });
-  } catch (error) {
-    const staleData = isPrismaPoolTimeout(error) ? readStalePublicWidgetCache(cacheKey) : null;
-    if (staleData) {
-      return corsJson(staleData, {
-        headers: { ...publicCacheHeaders, "X-FBR-Cache": "stale-if-error" }
-      });
+    return data;
+  });
+
+  if (staleData) {
+    const outcome = await Promise.race([
+      loadPromise.then(
+        (data) => ({ kind: "fresh" as const, data }),
+        (error: unknown) => ({ kind: "error" as const, error })
+      ),
+      new Promise<{ kind: "stale" }>((resolve) =>
+        setTimeout(() => resolve({ kind: "stale" }), STALE_REVALIDATE_WAIT_MS)
+      )
+    ]);
+
+    if (outcome.kind === "fresh") {
+      return corsJson(outcome.data, { headers: publicCacheHeaders });
     }
-    throw error;
+    if (outcome.kind === "stale") {
+      return staleResponse(staleData, "stale-while-refresh");
+    }
+    if (isPrismaPoolTimeout(outcome.error)) {
+      return staleResponse(staleData, "stale-if-error");
+    }
+    throw outcome.error;
   }
+
+  const data = await loadPromise;
+  return corsJson(data, { headers: publicCacheHeaders });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
