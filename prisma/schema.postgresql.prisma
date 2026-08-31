@@ -57,6 +57,21 @@ model Shop {
   brandReviews         BrandReview[]
   productReviews       ProductReview[]
   productQuestions     ProductQuestion[]
+  storefrontSubmissionRateLimits StorefrontSubmissionRateLimit[]
+}
+
+model StorefrontSubmissionRateLimit {
+  key         String   @id
+  shopDomain  String
+  count       Int      @default(0)
+  windowStart DateTime
+  expiresAt   DateTime
+  updatedAt   DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
+
+  @@index([shopDomain])
+  @@index([expiresAt])
 }
 
 model WidgetSettings {

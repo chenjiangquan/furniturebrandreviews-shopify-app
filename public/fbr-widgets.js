@@ -19,6 +19,7 @@
   const inflightFetches = new Map();
   const usefulCountOverrides = new Map();
   const fetchCacheTtl = 60000;
+  let hcaptchaScriptPromise;
   // Reviews can refresh in the background, while returning visitors get an
   // immediate render instead of waiting for a cross-region cold request.
   const persistentCacheTtl = 10 * 60 * 1000;
@@ -126,6 +127,54 @@
         delete window.__fbrEarlyFetches[url];
       }
     }
+  }
+
+  function loadHCaptcha() {
+    if (window.hcaptcha) return Promise.resolve(window.hcaptcha);
+    if (hcaptchaScriptPromise) return hcaptchaScriptPromise;
+
+    hcaptchaScriptPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://js.hcaptcha.com/1/api.js?render=explicit";
+      script.async = true;
+      script.defer = true;
+      script.onload = () => window.hcaptcha ? resolve(window.hcaptcha) : reject(new Error("Verification failed to load."));
+      script.onerror = () => reject(new Error("Verification failed to load."));
+      document.head.appendChild(script);
+    });
+    return hcaptchaScriptPromise;
+  }
+
+  async function renderReviewCaptcha(modal) {
+    const container = modal?.querySelector("[data-fbr-review-captcha]");
+    if (!container || container.dataset.fbrCaptchaId) return;
+
+    const sitekey = container.dataset.sitekey || "";
+    if (!sitekey) return;
+
+    try {
+      const hcaptcha = await loadHCaptcha();
+      const widgetId = hcaptcha.render(container, {
+        sitekey,
+        size: window.innerWidth < 390 ? "compact" : "normal"
+      });
+      container.dataset.fbrCaptchaId = String(widgetId);
+    } catch (error) {
+      const form = container.closest("form");
+      const button = form?.querySelector("button[type='submit']");
+      if (button) button.disabled = true;
+      setFormMessage(
+        form?.querySelector("[data-fbr-form-message]"),
+        error.message || "Review verification could not be loaded.",
+        "error"
+      );
+    }
+  }
+
+  function resetReviewCaptcha(form) {
+    const captcha = form?.querySelector("[data-fbr-review-captcha]");
+    if (!captcha?.dataset.fbrCaptchaId || !window.hcaptcha) return;
+    window.hcaptcha.reset(captcha.dataset.fbrCaptchaId);
   }
 
   function persistentCacheKey(url) {
@@ -824,7 +873,7 @@
         </main>
         </div>
       </div>
-      ${settings.showWriteReviewButton ? renderReviewModal(el, settings) : ""}
+      ${settings.showWriteReviewButton ? renderReviewModal(el, settings, data.captchaSiteKey) : ""}
       ${settings.showAskQuestionButton ? renderQuestionModal(el, settings) : ""}
     `;
 
@@ -840,7 +889,7 @@
     bindUsefulButtons(el);
   }
 
-  function renderReviewModal(el, settings) {
+  function renderReviewModal(el, settings, captchaSiteKey = "") {
     const formRadius = Number(settings.borderRadius) || 6;
     const buttonRadius = Math.max(0, Math.min(24, Number(settings.buttonBorderRadius ?? defaultProductSettings.buttonBorderRadius)));
     return `
@@ -855,14 +904,17 @@
             <input type="hidden" name="productId" value="${escapeAttr(el.dataset.productId || "")}">
             <input type="hidden" name="productHandle" value="${escapeAttr(el.dataset.productHandle || "")}">
             <input type="hidden" name="productTitle" value="${escapeAttr(el.dataset.productTitle || "")}">
+            <div class="fbr-honeypot" aria-hidden="true">
+              <label>Company website<input name="companyWebsite" tabindex="-1" autocomplete="off"></label>
+            </div>
 
             <label>
               Name
-              <input name="customerName" required>
+              <input name="customerName" minlength="2" maxlength="80" required>
             </label>
             <label>
               Email
-              <input name="customerEmail" type="email" required>
+              <input name="customerEmail" type="email" maxlength="254" required>
             </label>
             <label>
               Rating
@@ -876,11 +928,11 @@
             </label>
             <label>
               Review title
-              <input name="title" required>
+              <input name="title" minlength="3" maxlength="120" required>
             </label>
             <label>
               Review content
-              <textarea name="content" rows="5" required></textarea>
+              <textarea name="content" rows="5" minlength="10" maxlength="3000" required></textarea>
             </label>
             <label>
               Upload photo
@@ -888,8 +940,11 @@
               <input type="hidden" name="imageUrl" data-fbr-review-image-url>
             </label>
             <img class="fbr-photo-preview" data-fbr-photo-preview alt="">
+            ${captchaSiteKey
+              ? `<div class="fbr-review-captcha" data-fbr-review-captcha data-sitekey="${escapeAttr(captchaSiteKey)}"></div>`
+              : '<p class="fbr-muted fbr-captcha-unavailable">Review verification is temporarily unavailable.</p>'}
             <div class="fbr-modal-actions">
-              <button class="fbr-button" type="submit" style="background:${escapeAttr(settings.buttonBackgroundColor)}; color:${escapeAttr(settings.buttonTextColor)};">Submit review</button>
+              <button class="fbr-button" type="submit" ${captchaSiteKey ? "" : "disabled"} style="background:${escapeAttr(settings.buttonBackgroundColor)}; color:${escapeAttr(settings.buttonTextColor)};">Submit review</button>
               <button class="fbr-button fbr-button-secondary" type="button" data-fbr-close-review style="background:${escapeAttr(settings.cardBackgroundColor)}; color:${escapeAttr(settings.textColor)}; border-color:${escapeAttr(settings.borderColor)};">Cancel</button>
             </div>
             <p class="fbr-muted" data-fbr-form-message></p>
@@ -944,6 +999,7 @@
       document.documentElement.classList.add("fbr-modal-open");
       const firstInput = modal.querySelector("input[name='customerName']");
       if (firstInput) firstInput.focus();
+      renderReviewCaptcha(modal);
     };
 
     openButton.addEventListener("click", open);
@@ -1356,6 +1412,7 @@
       } catch (error) {
         isSubmitting = false;
         if (button) button.disabled = false;
+        resetReviewCaptcha(form);
         setFormMessage(message, error.message || "Review could not be submitted. Please try again.", "error");
       }
     });

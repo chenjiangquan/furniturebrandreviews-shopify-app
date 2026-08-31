@@ -20,6 +20,11 @@ import {
   readStalePublicWidgetCache,
   writePublicWidgetCache
 } from "~/models/public-widget-cache.server";
+import {
+  protectStorefrontReviewSubmission,
+  storefrontReviewCaptchaSiteKey,
+  validateStorefrontReviewPayload
+} from "~/models/storefront-review-protection.server";
 
 const publicCacheHeaders = {
   "Cache-Control": "public, max-age=0, s-maxage=30, stale-while-revalidate=300",
@@ -112,7 +117,8 @@ async function loadPublicWidgetData(
     widgetSettings: {
       ...widgetSettings,
       layoutType: entitlements.isPro ? widgetSettings.layoutType : "standard"
-    }
+    },
+    captchaSiteKey: storefrontReviewCaptchaSiteKey()
   };
 }
 
@@ -173,35 +179,72 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method === "OPTIONS") return corsJson({});
 
-  const contentType = request.headers.get("content-type") || "";
-  const payload = contentType.includes("application/json")
-    ? await request.json()
-    : Object.fromEntries(await request.formData());
-  const shopDomain = requiredString(payload.shop || payload.shopDomain, "shop");
-  const review = await createProductReview({
-    shopDomain,
-    productId: requiredString(payload.productId, "productId"),
-    productHandle: String(payload.productHandle || ""),
-    productTitle: String(payload.productTitle || ""),
-    customerName: requiredString(payload.customerName || payload.name, "name"),
-    customerEmail: String(payload.customerEmail || payload.email || ""),
-    rating: clampRating(payload.rating),
-    title: requiredString(payload.title, "title"),
-    content: requiredString(payload.content, "content"),
-    imageUrl: String(payload.imageUrl || ""),
-    verifiedPurchase: false,
-    source: "STOREFRONT"
-  });
-  clearPublicWidgetCache(shopDomain);
-  await Promise.all([
-    sendReviewNotification(shopDomain, review),
-    sendAppOwnerReviewNotification(shopDomain, review)
-  ]);
+  try {
+    const contentLength = Number(request.headers.get("content-length") || 0);
+    if (contentLength > 32_768) {
+      throw new Response("Review submission is too large.", { status: 413 });
+    }
 
-  return corsJson({
-    ok: true,
-    review,
-    status: review.status,
-    message: "Review submitted and published."
-  });
+    const contentType = request.headers.get("content-type") || "";
+    const payload = (contentType.includes("application/json")
+      ? await request.json()
+      : Object.fromEntries(await request.formData())) as Record<string, unknown>;
+    const shopDomain = requiredString(String(payload.shop || payload.shopDomain || ""), "shop").toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/u.test(shopDomain)) {
+      throw new Response("Invalid shop domain.", { status: 400 });
+    }
+
+    const productId = requiredString(String(payload.productId || ""), "productId");
+    const validated = validateStorefrontReviewPayload(payload);
+    await protectStorefrontReviewSubmission(
+      request,
+      payload,
+      shopDomain,
+      productId,
+      validated.customerEmail
+    );
+
+    const imageUrl = String(payload.imageUrl || "").trim();
+    if (imageUrl.length > 2048) {
+      throw new Response("Review image URL is too long.", { status: 400 });
+    }
+
+    const review = await createProductReview({
+      shopDomain,
+      productId,
+      productHandle: String(payload.productHandle || "").slice(0, 255),
+      productTitle: String(payload.productTitle || "").slice(0, 255),
+      customerName: validated.customerName,
+      customerEmail: validated.customerEmail,
+      rating: clampRating(String(payload.rating || "")),
+      title: validated.title,
+      content: validated.content,
+      imageUrl,
+      verifiedPurchase: false,
+      source: "STOREFRONT"
+    });
+    clearPublicWidgetCache(shopDomain);
+    await Promise.all([
+      sendReviewNotification(shopDomain, review),
+      sendAppOwnerReviewNotification(shopDomain, review)
+    ]);
+
+    return corsJson({
+      ok: true,
+      review,
+      status: review.status,
+      message: "Review submitted and published."
+    });
+  } catch (error) {
+    if (error instanceof Response) {
+      const headers = new Headers();
+      const retryAfter = error.headers.get("Retry-After");
+      if (retryAfter) headers.set("Retry-After", retryAfter);
+      return corsJson(
+        { ok: false, error: await error.text() || "Review could not be submitted." },
+        { status: error.status || 500, headers }
+      );
+    }
+    throw error;
+  }
 };

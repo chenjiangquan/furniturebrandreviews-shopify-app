@@ -1194,6 +1194,19 @@
   right: auto;
 }
 
+.fbr-honeypot {
+  height: 1px !important;
+  left: -10000px !important;
+  overflow: hidden !important;
+  position: absolute !important;
+  top: auto !important;
+  width: 1px !important;
+}
+
+.fbr-review-captcha {
+  min-height: 78px;
+}
+
 @media (max-width: 640px) {
   .fbr-modal-backdrop {
     align-items: flex-end;
