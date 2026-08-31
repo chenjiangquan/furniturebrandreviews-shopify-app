@@ -177,6 +177,38 @@
     window.hcaptcha.reset(captcha.dataset.fbrCaptchaId);
   }
 
+  async function renderQuestionCaptcha(modal) {
+    const container = modal?.querySelector("[data-fbr-question-captcha]");
+    if (!container || container.dataset.fbrCaptchaId) return;
+
+    const sitekey = container.dataset.sitekey || "";
+    if (!sitekey) return;
+
+    try {
+      const hcaptcha = await loadHCaptcha();
+      const widgetId = hcaptcha.render(container, {
+        sitekey,
+        size: window.innerWidth < 390 ? "compact" : "normal"
+      });
+      container.dataset.fbrCaptchaId = String(widgetId);
+    } catch (error) {
+      const form = container.closest("form");
+      const button = form?.querySelector("button[type='submit']");
+      if (button) button.disabled = true;
+      setFormMessage(
+        form?.querySelector("[data-fbr-question-message]"),
+        error.message || "Question verification could not be loaded.",
+        "error"
+      );
+    }
+  }
+
+  function resetQuestionCaptcha(form) {
+    const captcha = form?.querySelector("[data-fbr-question-captcha]");
+    if (!captcha?.dataset.fbrCaptchaId || !window.hcaptcha) return;
+    window.hcaptcha.reset(captcha.dataset.fbrCaptchaId);
+  }
+
   function persistentCacheKey(url) {
     return `${persistentCachePrefix}${url}`;
   }
@@ -874,7 +906,7 @@
         </div>
       </div>
       ${settings.showWriteReviewButton ? renderReviewModal(el, settings, data.captchaSiteKey) : ""}
-      ${settings.showAskQuestionButton ? renderQuestionModal(el, settings) : ""}
+      ${settings.showAskQuestionButton ? renderQuestionModal(el, settings, data.captchaSiteKey) : ""}
     `;
 
     bindInlineReviewModal(el, settings);
@@ -954,7 +986,7 @@
     `;
   }
 
-  function renderQuestionModal(el, settings) {
+  function renderQuestionModal(el, settings, captchaSiteKey = "") {
     const formRadius = Number(settings.borderRadius) || 6;
     const buttonRadius = Math.max(0, Math.min(24, Number(settings.buttonBorderRadius ?? defaultProductSettings.buttonBorderRadius)));
     return `
@@ -969,11 +1001,17 @@
             <input type="hidden" name="productId" value="${escapeAttr(el.dataset.productId || "")}">
             <input type="hidden" name="productHandle" value="${escapeAttr(el.dataset.productHandle || "")}">
             <input type="hidden" name="productTitle" value="${escapeAttr(el.dataset.productTitle || "")}">
-            <label>Name<input name="customerName" required></label>
-            <label>Email<input name="customerEmail" type="email" required></label>
-            <label>Question<textarea name="question" rows="5" required></textarea></label>
+            <div class="fbr-honeypot" aria-hidden="true">
+              <label>Company website<input name="companyWebsite" tabindex="-1" autocomplete="off"></label>
+            </div>
+            <label>Name<input name="customerName" minlength="2" maxlength="80" required></label>
+            <label>Email<input name="customerEmail" type="email" maxlength="254" required></label>
+            <label>Question<textarea name="question" rows="5" minlength="10" maxlength="1000" required></textarea></label>
+            ${captchaSiteKey
+              ? `<div class="fbr-review-captcha" data-fbr-question-captcha data-sitekey="${escapeAttr(captchaSiteKey)}"></div>`
+              : '<p class="fbr-muted fbr-captcha-unavailable">Question verification is temporarily unavailable.</p>'}
             <div class="fbr-modal-actions">
-              <button class="fbr-button" type="submit" style="background:${escapeAttr(settings.buttonBackgroundColor)}; color:${escapeAttr(settings.buttonTextColor)};">Submit</button>
+              <button class="fbr-button" type="submit" ${captchaSiteKey ? "" : "disabled"} style="background:${escapeAttr(settings.buttonBackgroundColor)}; color:${escapeAttr(settings.buttonTextColor)};">Submit</button>
               <button class="fbr-button fbr-button-secondary" type="button" data-fbr-close-question style="background:${escapeAttr(settings.cardBackgroundColor)}; color:${escapeAttr(settings.textColor)}; border-color:${escapeAttr(settings.borderColor)};">Cancel</button>
             </div>
             <p class="fbr-muted" data-fbr-question-message></p>
@@ -1030,6 +1068,9 @@
       modal.classList.add("fbr-modal-backdrop-active");
       modal.setAttribute("aria-hidden", "false");
       document.documentElement.classList.add("fbr-modal-open");
+      const firstInput = modal.querySelector("input[name='customerName']");
+      if (firstInput) firstInput.focus();
+      renderQuestionCaptcha(modal);
     };
     openButtons.forEach((button) => button.addEventListener("click", open));
     modal.querySelectorAll("[data-fbr-close-question]").forEach((button) => button.addEventListener("click", close));
@@ -1073,6 +1114,7 @@
         } catch (error) {
           setFormMessage(message, error.message || "Question could not be submitted. Please try again.", "error");
         } finally {
+          resetQuestionCaptcha(form);
           isSubmitting = false;
           if (button) button.disabled = false;
         }

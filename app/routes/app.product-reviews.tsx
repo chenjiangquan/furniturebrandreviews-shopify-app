@@ -1182,6 +1182,7 @@ function formatCreated(value: string | Date) {
 
   const now = new Date();
   const diffMs = now.getTime() - createdAt.getTime();
+  if (diffMs < 0) return createdAt.toLocaleDateString();
   const diffDays = Math.max(0, Math.floor(diffMs / 86_400_000));
 
   if (diffDays < 5) {

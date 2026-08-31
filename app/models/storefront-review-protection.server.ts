@@ -43,12 +43,56 @@ export function validateStorefrontReviewPayload(payload: StorefrontReviewPayload
   return { customerName, customerEmail, title, content };
 }
 
+export function validateStorefrontQuestionPayload(payload: StorefrontReviewPayload) {
+  if (String(payload.companyWebsite || "").trim()) {
+    throw new Response("Question could not be submitted.", { status: 422 });
+  }
+
+  const customerName = boundedText(payload.customerName || payload.name, "Name", 2, 80);
+  const customerEmail = boundedText(payload.customerEmail || payload.email, "Email", 3, 254).toLowerCase();
+  const question = boundedText(payload.question, "Question", 10, 1000);
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(customerEmail)) {
+    throw new Response("Enter a valid email address.", { status: 400 });
+  }
+
+  if (
+    looksLikeRandomToken(question.replace(/[0-9]/g, "")) ||
+    (looksLikeRandomToken(customerName) && !/\s/u.test(question))
+  ) {
+    throw new Response("Question content appears to be automated.", { status: 422 });
+  }
+
+  return { customerName, customerEmail, question };
+}
+
 export async function protectStorefrontReviewSubmission(
   request: Request,
   payload: StorefrontReviewPayload,
   shopDomain: string,
   productId: string,
   customerEmail: string
+) {
+  return protectStorefrontSubmission(request, payload, shopDomain, productId, customerEmail, "review");
+}
+
+export async function protectStorefrontQuestionSubmission(
+  request: Request,
+  payload: StorefrontReviewPayload,
+  shopDomain: string,
+  productId: string,
+  customerEmail: string
+) {
+  return protectStorefrontSubmission(request, payload, shopDomain, productId, customerEmail, "question");
+}
+
+async function protectStorefrontSubmission(
+  request: Request,
+  payload: StorefrontReviewPayload,
+  shopDomain: string,
+  productId: string,
+  customerEmail: string,
+  submissionType: "review" | "question"
 ) {
   const shop = await prisma.shop.findUnique({
     where: { shopDomain },
@@ -64,14 +108,14 @@ export async function protectStorefrontReviewSubmission(
   if (clientIp) {
     await consumeRateLimit(
       shopDomain,
-      `ip:${hashRateLimitValue(`${shopDomain}\u001f${clientIp}`)}`,
+      `${submissionType}-ip:${hashRateLimitValue(`${shopDomain}\u001f${clientIp}`)}`,
       3,
       10 * 60 * 1000
     );
   }
   await consumeRateLimit(
     shopDomain,
-    `email-product:${hashRateLimitValue(`${shopDomain}\u001f${customerEmail}\u001f${productId}`)}`,
+    `${submissionType}-email-product:${hashRateLimitValue(`${shopDomain}\u001f${customerEmail}\u001f${productId}`)}`,
     2,
     24 * 60 * 60 * 1000
   );
@@ -146,7 +190,7 @@ async function consumeRateLimit(shopDomain: string, key: string, maximum: number
   const rateLimit = rows[0];
   if (rateLimit && rateLimit.count > maximum) {
     const retryAfter = Math.max(1, Math.ceil((new Date(rateLimit.expiresAt).getTime() - Date.now()) / 1000));
-    throw new Response("Too many review submissions. Please try again later.", {
+    throw new Response("Too many submissions. Please try again later.", {
       status: 429,
       headers: { "Retry-After": String(retryAfter) }
     });
@@ -158,12 +202,12 @@ async function verifyHCaptcha(request: Request, payload: StorefrontReviewPayload
   const secretKey = process.env.HCAPTCHA_SECRET_KEY ||
     (process.env.NODE_ENV === "production" ? "" : DEVELOPMENT_HCAPTCHA_SECRET_KEY);
   if (!siteKey || !secretKey) {
-    throw new Response("Review verification is temporarily unavailable.", { status: 503 });
+    throw new Response("Verification is temporarily unavailable.", { status: 503 });
   }
 
   const token = String(payload["h-captcha-response"] || "").trim();
   if (!token) {
-    throw new Response("Complete the review verification before submitting.", { status: 400 });
+    throw new Response("Complete the verification before submitting.", { status: 400 });
   }
 
   const body = new URLSearchParams({
@@ -182,12 +226,12 @@ async function verifyHCaptcha(request: Request, payload: StorefrontReviewPayload
       signal: AbortSignal.timeout(5000)
     });
   } catch {
-    throw new Response("Review verification is temporarily unavailable.", { status: 503 });
+    throw new Response("Verification is temporarily unavailable.", { status: 503 });
   }
 
   const result = await response.json() as HCaptchaResult;
   if (!response.ok || !result.success) {
-    throw new Response("Review verification failed. Please try again.", { status: 403 });
+    throw new Response("Verification failed. Please try again.", { status: 403 });
   }
 
   const originHostname = hostnameFromOrigin(request.headers.get("origin"));
@@ -197,7 +241,7 @@ async function verifyHCaptcha(request: Request, payload: StorefrontReviewPayload
     result.hostname &&
     originHostname !== result.hostname.toLowerCase()
   ) {
-    throw new Response("Review verification did not match this storefront.", { status: 403 });
+    throw new Response("Verification did not match this storefront.", { status: 403 });
   }
 }
 
