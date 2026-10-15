@@ -18,6 +18,7 @@ SHOPIFY_API_SECRET=
 SHOPIFY_APP_URL=https://app.furniturebrandreviews.com
 SCOPES=read_products,read_themes
 DATABASE_URL=
+BLOB_READ_WRITE_TOKEN=
 ```
 
 Email notifications:

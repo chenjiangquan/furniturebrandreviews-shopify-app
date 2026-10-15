@@ -968,8 +968,7 @@
             </label>
             <label>
               Upload photo
-              <input type="file" accept="image/*" data-fbr-review-photo>
-              <input type="hidden" name="imageUrl" data-fbr-review-image-url>
+              <input type="file" name="image" accept="image/jpeg,image/png,image/webp,image/gif" data-fbr-review-photo>
             </label>
             <img class="fbr-photo-preview" data-fbr-photo-preview alt="">
             ${captchaSiteKey
@@ -1331,23 +1330,31 @@
 
   function bindPhotoInput(container) {
     const input = container.querySelector("[data-fbr-review-photo]");
-    const hidden = container.querySelector("[data-fbr-review-image-url]");
     const preview = container.querySelector("[data-fbr-photo-preview]");
-    if (!input || !hidden) return;
+    const message = container.querySelector("[data-fbr-form-message]");
+    if (!input) return;
+    let previewUrl = "";
+    const clearPreview = () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      previewUrl = "";
+      if (preview) preview.removeAttribute("src");
+    };
     input.addEventListener("change", () => {
       const file = input.files && input.files[0];
+      clearPreview();
       if (!file) {
-        hidden.value = "";
-        if (preview) preview.removeAttribute("src");
         return;
       }
-      const reader = new FileReader();
-      reader.addEventListener("load", () => {
-        hidden.value = String(reader.result || "");
-        if (preview) preview.src = hidden.value;
-      });
-      reader.readAsDataURL(file);
+      if (file.size > 3 * 1024 * 1024) {
+        input.value = "";
+        setFormMessage(message, "Review photo must be 3 MB or smaller.", "error");
+        return;
+      }
+      setFormMessage(message, "", "");
+      previewUrl = URL.createObjectURL(file);
+      if (preview) preview.src = previewUrl;
     });
+    input.form?.addEventListener("reset", clearPreview);
   }
 
   function bindCarousel(el) {
@@ -1431,8 +1438,7 @@
       try {
         const result = await fetchJson(`${apiBase(widgetEl || form)}/api/product-reviews`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(Object.fromEntries(new FormData(form)))
+          body: new FormData(form)
         });
         form.reset();
         setFormMessage(

@@ -1,4 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
+import { del, put } from "@vercel/blob";
+import { randomUUID } from "node:crypto";
 import { sendAppOwnerReviewNotification, sendReviewNotification } from "~/models/notifications.server";
 import {
   clampRating,
@@ -32,6 +34,58 @@ const publicCacheHeaders = {
   "Vercel-CDN-Cache-Control": "public, s-maxage=30, stale-while-revalidate=300"
 };
 const STALE_REVALIDATE_WAIT_MS = 750;
+const MAX_REVIEW_IMAGE_BYTES = 3 * 1024 * 1024;
+const MAX_MULTIPART_REVIEW_BYTES = MAX_REVIEW_IMAGE_BYTES + 256 * 1024;
+const REVIEW_IMAGE_EXTENSIONS: Record<string, string> = {
+  "image/gif": "gif",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp"
+};
+
+function isUploadedFile(value: unknown): value is File {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    "arrayBuffer" in value &&
+    typeof value.arrayBuffer === "function" &&
+    "size" in value &&
+    typeof value.size === "number" &&
+    "type" in value &&
+    typeof value.type === "string"
+  );
+}
+
+function hasExpectedImageSignature(contentType: string, bytes: Uint8Array) {
+  if (contentType === "image/jpeg") return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (contentType === "image/png") return bytes.slice(0, 8).every((byte, index) => byte === [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a][index]);
+  if (contentType === "image/gif") return new TextDecoder().decode(bytes.slice(0, 6)) === "GIF87a" || new TextDecoder().decode(bytes.slice(0, 6)) === "GIF89a";
+  if (contentType === "image/webp") return new TextDecoder().decode(bytes.slice(0, 4)) === "RIFF" && new TextDecoder().decode(bytes.slice(8, 12)) === "WEBP";
+  return false;
+}
+
+async function uploadReviewImage(file: File, shopDomain: string) {
+  const extension = REVIEW_IMAGE_EXTENSIONS[file.type];
+  if (!extension) {
+    throw new Response("Upload a JPEG, PNG, WebP, or GIF image.", { status: 400 });
+  }
+  if (file.size > MAX_REVIEW_IMAGE_BYTES) {
+    throw new Response("Review photo must be 3 MB or smaller.", { status: 413 });
+  }
+
+  const body = await file.arrayBuffer();
+  if (!hasExpectedImageSignature(file.type, new Uint8Array(body))) {
+    throw new Response("The uploaded review photo is not a valid image.", { status: 400 });
+  }
+
+  const shopPath = shopDomain.replace(/\.myshopify\.com$/u, "");
+  const blob = await put(`review-images/${shopPath}/${randomUUID()}.${extension}`, body, {
+    access: "public",
+    addRandomSuffix: false,
+    contentType: file.type
+  });
+  return blob.url;
+}
 
 function isPrismaPoolTimeout(error: unknown) {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2024");
@@ -181,11 +235,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     const contentLength = Number(request.headers.get("content-length") || 0);
-    if (contentLength > 32_768) {
+    const contentType = request.headers.get("content-type") || "";
+    const isMultipart = contentType.includes("multipart/form-data");
+    const maximumRequestBytes = isMultipart ? MAX_MULTIPART_REVIEW_BYTES : 32_768;
+    if (contentLength > maximumRequestBytes) {
       throw new Response("Review submission is too large.", { status: 413 });
     }
 
-    const contentType = request.headers.get("content-type") || "";
     const payload = (contentType.includes("application/json")
       ? await request.json()
       : Object.fromEntries(await request.formData())) as Record<string, unknown>;
@@ -204,25 +260,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       validated.customerEmail
     );
 
-    const imageUrl = String(payload.imageUrl || "").trim();
-    if (imageUrl.length > 2048) {
+    const imageFile = isUploadedFile(payload.image) && payload.image.size > 0 ? payload.image : null;
+    const suppliedImageUrl = String(payload.imageUrl || "").trim();
+    if (suppliedImageUrl.length > 2048) {
       throw new Response("Review image URL is too long.", { status: 400 });
     }
+    if (suppliedImageUrl && !/^https:\/\//u.test(suppliedImageUrl)) {
+      throw new Response("Review image URL must use HTTPS.", { status: 400 });
+    }
 
-    const review = await createProductReview({
-      shopDomain,
-      productId,
-      productHandle: String(payload.productHandle || "").slice(0, 255),
-      productTitle: String(payload.productTitle || "").slice(0, 255),
-      customerName: validated.customerName,
-      customerEmail: validated.customerEmail,
-      rating: clampRating(String(payload.rating || "")),
-      title: validated.title,
-      content: validated.content,
-      imageUrl,
-      verifiedPurchase: false,
-      source: "STOREFRONT"
-    });
+    const imageUrl = imageFile ? await uploadReviewImage(imageFile, shopDomain) : suppliedImageUrl;
+
+    let review;
+    try {
+      review = await createProductReview({
+        shopDomain,
+        productId,
+        productHandle: String(payload.productHandle || "").slice(0, 255),
+        productTitle: String(payload.productTitle || "").slice(0, 255),
+        customerName: validated.customerName,
+        customerEmail: validated.customerEmail,
+        rating: clampRating(String(payload.rating || "")),
+        title: validated.title,
+        content: validated.content,
+        imageUrl,
+        verifiedPurchase: false,
+        source: "STOREFRONT"
+      });
+    } catch (error) {
+      if (imageFile && imageUrl) await del(imageUrl).catch(() => undefined);
+      throw error;
+    }
     clearPublicWidgetCache(shopDomain);
     await Promise.all([
       sendReviewNotification(shopDomain, review),
