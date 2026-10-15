@@ -178,6 +178,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { ok: true, intent: "markAllVerified", updatedCount: result.count };
   }
 
+  if (intent === "customerName") {
+    if (!entitlements.isPro) {
+      return {
+        ok: false,
+        intent: "customerName",
+        error: "Editing customer names is available on the Pro plan."
+      };
+    }
+
+    const customerName = String(form.get("customerName") || "").trim();
+    if (!customerName) {
+      return { ok: false, intent: "customerName", error: "Customer name is required." };
+    }
+    if (customerName.length > 100) {
+      return { ok: false, intent: "customerName", error: "Customer name must be 100 characters or fewer." };
+    }
+
+    const result = await prisma.productReview.updateMany({
+      where: { id, shopDomain: session.shop },
+      data: { customerName }
+    });
+    if (result.count === 0) {
+      return { ok: false, intent: "customerName", error: "Review not found." };
+    }
+    clearPublicWidgetCache(session.shop);
+    return { ok: true, intent: "customerName" };
+  }
+
   if (intent === "imageHidden") {
     await prisma.productReview.updateMany({
       where: { id, shopDomain: session.shop },
@@ -494,7 +522,15 @@ export default function ProductReviews() {
               <span>Moderation</span>
             </div>
             <BlockStack gap="0">
-              {reviews.map((review: any) => <ReviewRow key={review.id} review={review} busy={busy} />)}
+              {reviews.map((review: any) => (
+                <ReviewRow
+                  key={review.id}
+                  review={review}
+                  busy={busy}
+                  isPro={entitlements.isPro}
+                  upgradeUrl={upgradeUrl}
+                />
+              ))}
               {reviews.length === 0 ? (
                 <Box padding="500">
                   <Text as="p" tone="subdued">No reviews match this view.</Text>
@@ -519,11 +555,21 @@ export default function ProductReviews() {
   );
 }
 
-function ReviewRow({ review, busy }: { review: any; busy: boolean }) {
+function ReviewRow({ review, busy, isPro, upgradeUrl }: { review: any; busy: boolean; isPro: boolean; upgradeUrl: string }) {
   const fetcher = useFetcher();
   const [replyOpen, setReplyOpen] = React.useState(false);
   const [imagePreviewOpen, setImagePreviewOpen] = React.useState(false);
   const [deleteImageOpen, setDeleteImageOpen] = React.useState(false);
+  const [editNameOpen, setEditNameOpen] = React.useState(false);
+  const [customerName, setCustomerName] = React.useState(review.customerName);
+  const fetcherResult = fetcher.data as { ok?: boolean; intent?: string; error?: string } | undefined;
+
+  React.useEffect(() => {
+    if (fetcherResult?.ok && fetcherResult.intent === "customerName") {
+      setEditNameOpen(false);
+    }
+  }, [fetcherResult]);
+
   const submitIntent = (intent: string) => {
     const formData = new FormData();
     formData.set("intent", intent);
@@ -537,6 +583,14 @@ function ReviewRow({ review, busy }: { review: any; busy: boolean }) {
     submitIntent("deleteImage");
   };
 
+  const editCustomerName = () => {
+    const formData = new FormData();
+    formData.set("intent", "customerName");
+    formData.set("id", review.id);
+    formData.set("customerName", customerName.trim());
+    fetcher.submit(formData, { method: "post" });
+  };
+
   return (
     <div style={{ display: "grid", gridTemplateColumns: "minmax(180px, 0.85fr) minmax(90px, 0.35fr) minmax(240px, 1.45fr) minmax(190px, 0.8fr)", gap: 16, padding: 16, borderBottom: "1px solid #ebebeb", alignItems: "start" }}>
       <InlineStack gap="300" wrap={false} blockAlign="start">
@@ -544,7 +598,52 @@ function ReviewRow({ review, busy }: { review: any; busy: boolean }) {
           <Text as="p" variant="headingSm">{review.customerName}</Text>
           <Text as="p" tone="subdued">{review.productTitle || review.productHandle || review.productId}</Text>
           <Text as="p" tone="subdued">via {review.source === "IMPORTED" ? "Imported" : "Storefront"}</Text>
-          <Button size="micro">Add tags</Button>
+          <InlineStack gap="200">
+            <Button size="micro">Add tags</Button>
+            <Button
+              size="micro"
+              onClick={() => {
+                if (!isPro) {
+                  window.open(upgradeUrl, "_top");
+                  return;
+                }
+                setCustomerName(review.customerName);
+                setEditNameOpen(true);
+              }}
+            >
+              {isPro ? "Edit name" : "Edit name — Pro"}
+            </Button>
+          </InlineStack>
+          <Modal
+            open={editNameOpen}
+            onClose={() => setEditNameOpen(false)}
+            title="Edit customer name"
+            primaryAction={{
+              content: "Save",
+              disabled: !customerName.trim() || customerName.trim().length > 100,
+              loading: fetcher.state !== "idle",
+              onAction: editCustomerName
+            }}
+            secondaryActions={[{ content: "Cancel", onAction: () => setEditNameOpen(false) }]}
+          >
+            <Modal.Section>
+              <BlockStack gap="300">
+                {fetcherResult?.ok === false && fetcherResult.intent === "customerName" ? (
+                  <Banner title="Name not updated" tone="critical">
+                    <Text as="p">{fetcherResult.error}</Text>
+                  </Banner>
+                ) : null}
+                <TextField
+                  label="Customer name"
+                  value={customerName}
+                  onChange={setCustomerName}
+                  autoComplete="off"
+                  maxLength={100}
+                  showCharacterCount
+                />
+              </BlockStack>
+            </Modal.Section>
+          </Modal>
         </BlockStack>
       </InlineStack>
 
@@ -610,8 +709,8 @@ function ReviewRow({ review, busy }: { review: any; busy: boolean }) {
       </InlineStack>
 
       <BlockStack gap="300">
-        {(fetcher.data as { error?: string } | undefined)?.error ? (
-          <Text as="p" tone="critical">{(fetcher.data as { error?: string }).error}</Text>
+        {fetcherResult?.error && fetcherResult.intent !== "customerName" ? (
+          <Text as="p" tone="critical">{fetcherResult.error}</Text>
         ) : null}
         <ReplyModal review={review} open={replyOpen} onClose={() => setReplyOpen(false)} />
         <VerifiedPurchaseControl review={review} />
