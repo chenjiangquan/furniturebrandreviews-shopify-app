@@ -599,7 +599,6 @@ function ReviewRow({ review, busy, isPro, upgradeUrl }: { review: any; busy: boo
           <Text as="p" tone="subdued">{review.productTitle || review.productHandle || review.productId}</Text>
           <Text as="p" tone="subdued">via {review.source === "IMPORTED" ? "Imported" : "Storefront"}</Text>
           <InlineStack gap="200">
-            <Button size="micro">Add tags</Button>
             <Button
               size="micro"
               onClick={() => {
