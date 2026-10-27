@@ -280,7 +280,78 @@ type ResendSendResult = {
   [key: string]: unknown;
 };
 
-async function sendEmail(input: { to: string; subject: string; html: string }) {
+export async function sendReviewInvitationRequestEmail(input: {
+  to: string;
+  replyTo?: string;
+  subject: string;
+  heading: string;
+  body: string;
+  storeName: string;
+  shopDomain: string;
+  orderName: string;
+  products: Array<{ title: string; variantTitle?: string }>;
+  reviewUrl: string;
+  unsubscribeUrl: string;
+  scheduledAt?: Date;
+  idempotencyKey: string;
+  reminder?: boolean;
+}) {
+  const productRows = input.products.map((product) => {
+    const variant = String(product.variantTitle || "").trim();
+    return `
+      <div style="border-bottom:1px solid #edf0f2;padding:12px 0;">
+        <div style="font-size:15px;line-height:22px;color:#101828;font-weight:700;">${escapeHtml(product.title)}</div>
+        ${variant ? `<div style="font-size:13px;line-height:20px;color:#667085;">${escapeHtml(variant)}</div>` : ""}
+      </div>
+    `;
+  }).join("");
+  const html = baseEmailTemplate({
+    eyebrow: input.reminder ? "Review reminder" : "Verified purchase",
+    heading: input.heading,
+    intro: input.body,
+    shopDomain: input.shopDomain,
+    ctaUrl: input.reviewUrl,
+    ctaLabel: "Write a review",
+    content: `
+      <div style="background:#f8faf9;border:1px solid #dde5e1;border-radius:14px;padding:6px 16px;margin:18px 0;">
+        ${productRows}
+      </div>
+      ${input.orderName ? `<div style="font-size:13px;line-height:20px;color:#667085;">Order ${escapeHtml(input.orderName)}</div>` : ""}
+    `,
+    footerText: `Sent by ${escapeHtml(input.storeName || input.shopDomain)} via Furniture Brand Reviews · <a href="${escapeHtml(input.unsubscribeUrl)}" style="color:#475467;">Unsubscribe from review invitations</a>`
+  });
+
+  return sendEmail({
+    to: input.to,
+    replyTo: input.replyTo,
+    subject: input.reminder ? `Reminder: ${input.subject}` : input.subject,
+    html,
+    scheduledAt: input.scheduledAt,
+    idempotencyKey: input.idempotencyKey
+  });
+}
+
+export async function cancelScheduledEmail(emailId: string) {
+  const apiKey = String(process.env.RESEND_API_KEY || "").trim();
+  if (!apiKey || !emailId) return;
+  const resend = new Resend(apiKey);
+  const result = await resend.emails.cancel(emailId);
+  if (result.error) {
+    console.warn("[email] unable to cancel scheduled email", {
+      emailId,
+      error: resendErrorMessage(result)
+    });
+  }
+}
+
+async function sendEmail(input: {
+  to: string;
+  subject: string;
+  html: string;
+  replyTo?: string;
+  scheduledAt?: Date;
+  idempotencyKey?: string;
+}) {
   const apiKey = String(process.env.RESEND_API_KEY || "").trim();
   const from = String(process.env.NOTIFICATION_FROM_EMAIL || "").trim();
   if (!apiKey || !from) {
@@ -299,8 +370,10 @@ async function sendEmail(input: { to: string; subject: string; html: string }) {
       from,
       to: input.to,
       subject: input.subject,
-      html: input.html
-  });
+      html: input.html,
+      replyTo: input.replyTo,
+      scheduledAt: input.scheduledAt?.toISOString()
+  }, input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : undefined);
   console.log("[email] resend result", sanitizeResendLog(result));
 
   if (result.error) {

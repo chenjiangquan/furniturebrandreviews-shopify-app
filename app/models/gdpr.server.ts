@@ -38,12 +38,13 @@ export async function handleAppUninstalled(shopDomain: string) {
 export async function handleCustomersDataRequest(shopDomain: string, payload: unknown) {
   const gdprPayload = payload as ShopifyGdprPayload;
   const customerEmail = normalizeEmail(gdprPayload.customer?.email);
-  const [reviewCount, questionCount] = customerEmail
+  const [reviewCount, questionCount, invitationCount] = customerEmail
     ? await Promise.all([
         prisma.productReview.count({ where: { shopDomain, customerEmail } }),
-        prisma.productQuestion.count({ where: { shopDomain, customerEmail } })
+        prisma.productQuestion.count({ where: { shopDomain, customerEmail } }),
+        prisma.reviewInvitation.count({ where: { shopDomain, customerEmail } })
       ])
-    : [0, 0];
+    : [0, 0, 0];
 
   console.log("[webhook] CUSTOMERS_DATA_REQUEST received", {
     shopDomain,
@@ -51,7 +52,8 @@ export async function handleCustomersDataRequest(shopDomain: string, payload: un
     customerEmail: customerEmail || null,
     dataRequestId: gdprPayload.data_request?.id || null,
     matchingProductReviews: reviewCount,
-    matchingProductQuestions: questionCount
+    matchingProductQuestions: questionCount,
+    matchingReviewInvitations: invitationCount
   });
 }
 
@@ -69,7 +71,7 @@ export async function handleCustomersRedact(shopDomain: string, payload: unknown
     return;
   }
 
-  const [reviews, questions] = await prisma.$transaction([
+  const [reviews, questions, invitations, suppressions] = await prisma.$transaction([
     prisma.productReview.updateMany({
       where: { shopDomain, customerEmail },
       data: {
@@ -83,13 +85,17 @@ export async function handleCustomersRedact(shopDomain: string, payload: unknown
         customerName: "Redacted customer",
         customerEmail: ""
       }
-    })
+    }),
+    prisma.reviewInvitation.deleteMany({ where: { shopDomain, customerEmail } }),
+    prisma.reviewInvitationSuppression.deleteMany({ where: { shopDomain, customerEmail } })
   ]);
 
   console.log("[webhook] CUSTOMERS_REDACT completed", {
     shopDomain,
     redactedProductReviews: reviews.count,
-    redactedProductQuestions: questions.count
+    redactedProductQuestions: questions.count,
+    deletedReviewInvitations: invitations.count,
+    deletedReviewInvitationSuppressions: suppressions.count
   });
 }
 
@@ -99,6 +105,9 @@ export async function handleShopRedact(shopDomain: string) {
     prisma.session.deleteMany({ where: { shop: shopDomain } }),
     prisma.productReview.deleteMany({ where: { shopDomain } }),
     prisma.productQuestion.deleteMany({ where: { shopDomain } }),
+    prisma.reviewInvitation.deleteMany({ where: { shopDomain } }),
+    prisma.reviewInvitationSuppression.deleteMany({ where: { shopDomain } }),
+    prisma.reviewInvitationSettings.deleteMany({ where: { shopDomain } }),
     prisma.brandReview.deleteMany({ where: { shopDomain } }),
     prisma.productReviewSettings.deleteMany({ where: { shopDomain } }),
     prisma.googleSeoSettings.deleteMany({ where: { shopDomain } }),

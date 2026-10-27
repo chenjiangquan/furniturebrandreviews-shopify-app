@@ -10,6 +10,7 @@ export default function AdminApp() {
       <NavMenu>
         <Link to="/app" rel="home" prefetch="render">Dashboard</Link>
         <Link to="/app/product-reviews" prefetch="render">Product Reviews</Link>
+        <Link to="/app/review-invitations" prefetch="render">Review Invitations</Link>
         <Link to="/app/widgets-settings" prefetch="render">Widgets Settings</Link>
       </NavMenu>
       <Outlet />

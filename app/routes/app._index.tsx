@@ -266,6 +266,7 @@ export default function Dashboard() {
               </Text>
               <InlineStack gap="400">
                 <Link to="/app/product-reviews">Product Reviews</Link>
+                <Link to="/app/review-invitations">Review Invitations</Link>
                 <Link to="/app/widgets-settings">Widgets Settings</Link>
               </InlineStack>
             </BlockStack>
@@ -308,6 +309,7 @@ export default function Dashboard() {
                 "Google and SEO settings",
                 "AI summary",
                 "Questions and Answers",
+                "Review invitation reminders",
                 "Email customizations",
                 "Social/Google integrations"
               ].map((item) => <Text key={item} as="p">- {item}</Text>)}
@@ -351,6 +353,8 @@ const planRows: ReadonlyArray<readonly [string, PlanCellValue, PlanCellValue]> =
   ["Brand trust widgets", false, true],
   ["Photo reviews", true, true],
   ["Review replies", true, true],
+  ["Automatic review invitations", "30/month", "500/month"],
+  ["Review invitation reminders", false, true],
   ["Questions & Answers", true, true],
   ["Google and SEO", false, true],
   ["AI review summary", false, true],

@@ -452,8 +452,9 @@ export async function getProductReviewRatingSummary(
 }
 
 function publicProductReview(review: ProductReview) {
+  const { reviewInvitationItemId: _reviewInvitationItemId, ...publicReview } = review;
   return {
-    ...review,
+    ...publicReview,
     imageUrl: review.imageHidden ? "" : review.imageUrl
   };
 }

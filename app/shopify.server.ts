@@ -41,7 +41,12 @@ const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
   apiVersion: ApiVersion.October25,
-  scopes: process.env.SCOPES?.split(","),
+  scopes: [...new Set([
+    ...String(process.env.SCOPES || "").split(",").map((scope) => scope.trim()).filter(Boolean),
+    "read_orders",
+    "read_products",
+    "read_themes"
+  ])],
   appUrl,
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),

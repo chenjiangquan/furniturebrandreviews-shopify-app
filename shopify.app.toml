@@ -8,7 +8,7 @@ automatically_update_urls_on_dev = true
 dev_store_url = "furniture-brand-reviews-dev.myshopify.com"
 
 [access_scopes]
-scopes = "read_products,read_themes"
+scopes = "read_orders,read_products,read_themes"
 
 [auth]
 redirect_urls = [
@@ -27,6 +27,18 @@ api_version = "2025-10"
   [[webhooks.subscriptions]]
   topics = ["app_subscriptions/update"]
   uri = "/webhooks/app-subscriptions-update"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/fulfilled"]
+  uri = "/webhooks/orders-fulfilled"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/cancelled"]
+  uri = "/webhooks/orders-cancelled"
+
+  [[webhooks.subscriptions]]
+  topics = ["refunds/create"]
+  uri = "/webhooks/refunds-create"
 
   [[webhooks.subscriptions]]
   compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]

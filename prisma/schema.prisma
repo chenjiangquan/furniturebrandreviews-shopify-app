@@ -8,55 +8,58 @@ datasource db {
 }
 
 model Session {
-  id            String    @id
-  shop          String
-  state         String
-  isOnline      Boolean   @default(false)
-  scope         String?
-  expires       DateTime?
-  accessToken   String
-  userId        BigInt?
-  firstName     String?
-  lastName      String?
-  email         String?
-  accountOwner  Boolean   @default(false)
-  locale        String?
-  collaborator  Boolean?  @default(false)
-  emailVerified Boolean?  @default(false)
-  refreshToken  String?
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
   refreshTokenExpires DateTime?
 
   @@map("session")
 }
 
 model Shop {
-  id          String   @id @default(cuid())
-  shopDomain  String   @unique
-  accessToken String?
-  scope       String?
-  storeName   String?
-  storeEmail  String?
-  contactEmail String?
-  shopOwnerEmail String?
-  notificationEmail String?
-  reviewEmailNotificationsEnabled Boolean @default(true)
-  questionEmailNotificationsEnabled Boolean @default(true)
-  isActive   Boolean  @default(true)
-  uninstalledAt DateTime?
-  installedAt DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                                String    @id @default(cuid())
+  shopDomain                        String    @unique
+  accessToken                       String?
+  scope                             String?
+  storeName                         String?
+  storeEmail                        String?
+  contactEmail                      String?
+  shopOwnerEmail                    String?
+  notificationEmail                 String?
+  reviewEmailNotificationsEnabled   Boolean   @default(true)
+  questionEmailNotificationsEnabled Boolean   @default(true)
+  isActive                          Boolean   @default(true)
+  uninstalledAt                     DateTime?
+  installedAt                       DateTime  @default(now())
+  createdAt                         DateTime  @default(now())
+  updatedAt                         DateTime  @updatedAt
 
-  widgetSettings       WidgetSettings?
-  brandWidgetData      BrandWidgetData?
-  productReviewSettings ProductReviewSettings?
-  googleSeoSettings    GoogleSeoSettings?
-  subscriptionSettings SubscriptionSettings?
-  monthlyPlanUsage     MonthlyPlanUsage[]
-  brandReviews         BrandReview[]
-  productReviews       ProductReview[]
-  productQuestions     ProductQuestion[]
+  widgetSettings                 WidgetSettings?
+  brandWidgetData                BrandWidgetData?
+  productReviewSettings          ProductReviewSettings?
+  googleSeoSettings              GoogleSeoSettings?
+  subscriptionSettings           SubscriptionSettings?
+  monthlyPlanUsage               MonthlyPlanUsage[]
+  brandReviews                   BrandReview[]
+  productReviews                 ProductReview[]
+  productQuestions               ProductQuestion[]
   storefrontSubmissionRateLimits StorefrontSubmissionRateLimit[]
+  reviewInvitationSettings       ReviewInvitationSettings?
+  reviewInvitations              ReviewInvitation[]
+  reviewInvitationSuppressions   ReviewInvitationSuppression[]
 }
 
 model StorefrontSubmissionRateLimit {
@@ -129,28 +132,30 @@ model BrandReview {
 }
 
 model ProductReview {
-  id               String              @id @default(cuid())
-  shopDomain       String
-  productId        String
-  productHandle    String?
-  productTitle     String?
-  customerName     String
-  customerEmail    String?
-  rating           Int
-  title            String
-  content          String
-  imageUrl         String?
-  imageHidden      Boolean             @default(false)
-  usefulCount      Int                 @default(0)
-  source           String              @default("STOREFRONT")
-  merchantReply    String?
-  repliedAt        DateTime?
-  verifiedPurchase Boolean             @default(false)
-  status           String              @default("PUBLISHED")
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  id                     String    @id @default(cuid())
+  shopDomain             String
+  productId              String
+  productHandle          String?
+  productTitle           String?
+  customerName           String
+  customerEmail          String?
+  rating                 Int
+  title                  String
+  content                String
+  imageUrl               String?
+  imageHidden            Boolean   @default(false)
+  usefulCount            Int       @default(0)
+  source                 String    @default("STOREFRONT")
+  merchantReply          String?
+  repliedAt              DateTime?
+  verifiedPurchase       Boolean   @default(false)
+  status                 String    @default("PUBLISHED")
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  reviewInvitationItemId String?   @unique
 
-  shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
+  shop                 Shop                  @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
+  reviewInvitationItem ReviewInvitationItem? @relation(fields: [reviewInvitationItemId], references: [id], onDelete: SetNull)
 
   @@index([shopDomain, productId])
   @@index([shopDomain, status])
@@ -163,20 +168,20 @@ model ProductReview {
 }
 
 model ProductQuestion {
-  id            String    @id @default(cuid())
-  shopDomain    String
-  productId     String
-  productHandle String?
-  productTitle  String?
-  customerName  String
-  customerEmail String?
-  question      String
-  answer        String?
-  status        String    @default("PENDING")
-  createdAt     DateTime  @default(now())
-  answeredAt    DateTime?
+  id               String    @id @default(cuid())
+  shopDomain       String
+  productId        String
+  productHandle    String?
+  productTitle     String?
+  customerName     String
+  customerEmail    String?
+  question         String
+  answer           String?
+  status           String    @default("PENDING")
+  createdAt        DateTime  @default(now())
+  answeredAt       DateTime?
   answerNotifiedAt DateTime?
-  updatedAt     DateTime  @updatedAt
+  updatedAt        DateTime  @updatedAt
 
   shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
 
@@ -189,93 +194,93 @@ model ProductQuestion {
 }
 
 model ProductReviewSettings {
-  id                       String   @id @default(cuid())
-  shopDomain               String   @unique
-  productReviewsEnabled    Boolean  @default(true)
-  productReviewWidgetEnabled Boolean @default(true)
-  autoApproveReviews       Boolean  @default(false)
-  requireEmail             Boolean  @default(true)
-  showVerifiedBadge        Boolean  @default(true)
-  allowPhotoReviews        Boolean  @default(false)
-  emailNotificationEnabled Boolean  @default(false)
-  starColor                String   @default("#f5a623")
-  starBackgroundColor      String   @default("#00b67a")
-  starBorderColor          String   @default("#00b67a")
-  starBorderRadius         Int      @default(2)
-  starSize                 Int      @default(22)
-  starGap                  Int      @default(2)
-  starRatingBadgeStarColor String  @default("#f5a623")
-  starRatingBadgeTextColor String  @default("#202223")
-  starRatingBadgeBackgroundColor String @default("#ffffff")
-  starRatingBadgeBorderColor String @default("#dfe3e8")
-  starRatingBadgeBorderWidth Int   @default(1)
-  starRatingBadgeBorderRadius Int  @default(8)
-  starRatingBadgeStarGap     Int   @default(2)
-  starRatingBadgeHideNoReviewProduct Boolean @default(false)
-  starRatingBadgeScrollToReviews Boolean @default(true)
-  ratingBarColor           String   @default("#f5a623")
-  ratingBarBackgroundColor String   @default("#eef0f2")
-  ratingBadgeBackgroundColor String @default("#fff7e6")
-  ratingBadgeBorderColor   String   @default("#f1c36d")
-  ratingBadgeBorderRadius  Int      @default(999)
-  ratingBadgePadding       Int      @default(8)
-  avatarBackgroundColor    String   @default("#eef4ff")
-  avatarTextColor          String   @default("#24438f")
-  avatarSize               Int      @default(28)
-  buttonBackgroundColor    String   @default("#1f6f64")
-  buttonTextColor          String   @default("#ffffff")
-  buttonBorderColor        String   @default("#dfe3e8")
-  textColor                String   @default("#202223")
-  lighterTextColor         String   @default("#6d7175")
-  titleTextColor           String   @default("#202223")
-  contentTextColor         String   @default("#202223")
-  titleFontSize            Int      @default(16)
-  contentFontSize          Int      @default(15)
-  hideReviewDate           Boolean  @default(false)
-  hideNoReviewProduct      Boolean  @default(false)
-  borderColor              String   @default("#dfe3e8")
-  cardBackgroundColor      String   @default("#ffffff")
-  borderRadius             Int      @default(8)
-  reviewCardBorderWidth    Int      @default(1)
-  buttonBorderRadius       Int      @default(8)
-  widgetBackgroundColor    String   @default("#ffffff")
-  widgetBorderRadius       Int      @default(8)
-  widgetBorderWidth        Int      @default(0)
-  reviewCardSpacing        Int      @default(16)
-  widgetMaxWidth           Int      @default(960)
-  showAverageRating        Boolean  @default(true)
-  showReviewCount          Boolean  @default(true)
-  showRatingBreakdown      Boolean  @default(true)
-  showWriteReviewButton    Boolean  @default(true)
-  showAskQuestionButton    Boolean  @default(false)
-  showAiSummary            Boolean  @default(true)
-  showReviewHighlights     Boolean  @default(true)
-  showPhotoSummary         Boolean  @default(true)
-  photoSummaryLimit        Int      @default(8)
-  showReviewerPhotos       Boolean  @default(false)
-  layoutType               String   @default("standard")
-  carouselCardsPerRow      Int      @default(3)
-  carouselAutoSlide        Boolean  @default(false)
-  carouselAutoplaySpeed    Int      @default(4)
-  carouselShowArrows       Boolean  @default(true)
-  carouselShowDots         Boolean  @default(true)
-  reviewsPerPage           Int      @default(5)
-  reviewsPerRow            Int      @default(3)
-  sortDefault              String   @default("newest")
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  id                                 String   @id @default(cuid())
+  shopDomain                         String   @unique
+  productReviewsEnabled              Boolean  @default(true)
+  productReviewWidgetEnabled         Boolean  @default(true)
+  autoApproveReviews                 Boolean  @default(false)
+  requireEmail                       Boolean  @default(true)
+  showVerifiedBadge                  Boolean  @default(true)
+  allowPhotoReviews                  Boolean  @default(false)
+  emailNotificationEnabled           Boolean  @default(false)
+  starColor                          String   @default("#f5a623")
+  starBackgroundColor                String   @default("#00b67a")
+  starBorderColor                    String   @default("#00b67a")
+  starBorderRadius                   Int      @default(2)
+  starSize                           Int      @default(22)
+  starGap                            Int      @default(2)
+  starRatingBadgeStarColor           String   @default("#f5a623")
+  starRatingBadgeTextColor           String   @default("#202223")
+  starRatingBadgeBackgroundColor     String   @default("#ffffff")
+  starRatingBadgeBorderColor         String   @default("#dfe3e8")
+  starRatingBadgeBorderWidth         Int      @default(1)
+  starRatingBadgeBorderRadius        Int      @default(8)
+  starRatingBadgeStarGap             Int      @default(2)
+  starRatingBadgeHideNoReviewProduct Boolean  @default(false)
+  starRatingBadgeScrollToReviews     Boolean  @default(true)
+  ratingBarColor                     String   @default("#f5a623")
+  ratingBarBackgroundColor           String   @default("#eef0f2")
+  ratingBadgeBackgroundColor         String   @default("#fff7e6")
+  ratingBadgeBorderColor             String   @default("#f1c36d")
+  ratingBadgeBorderRadius            Int      @default(999)
+  ratingBadgePadding                 Int      @default(8)
+  avatarBackgroundColor              String   @default("#eef4ff")
+  avatarTextColor                    String   @default("#24438f")
+  avatarSize                         Int      @default(28)
+  buttonBackgroundColor              String   @default("#1f6f64")
+  buttonTextColor                    String   @default("#ffffff")
+  buttonBorderColor                  String   @default("#dfe3e8")
+  textColor                          String   @default("#202223")
+  lighterTextColor                   String   @default("#6d7175")
+  titleTextColor                     String   @default("#202223")
+  contentTextColor                   String   @default("#202223")
+  titleFontSize                      Int      @default(16)
+  contentFontSize                    Int      @default(15)
+  hideReviewDate                     Boolean  @default(false)
+  hideNoReviewProduct                Boolean  @default(false)
+  borderColor                        String   @default("#dfe3e8")
+  cardBackgroundColor                String   @default("#ffffff")
+  borderRadius                       Int      @default(8)
+  reviewCardBorderWidth              Int      @default(1)
+  buttonBorderRadius                 Int      @default(8)
+  widgetBackgroundColor              String   @default("#ffffff")
+  widgetBorderRadius                 Int      @default(8)
+  widgetBorderWidth                  Int      @default(0)
+  reviewCardSpacing                  Int      @default(16)
+  widgetMaxWidth                     Int      @default(960)
+  showAverageRating                  Boolean  @default(true)
+  showReviewCount                    Boolean  @default(true)
+  showRatingBreakdown                Boolean  @default(true)
+  showWriteReviewButton              Boolean  @default(true)
+  showAskQuestionButton              Boolean  @default(false)
+  showAiSummary                      Boolean  @default(true)
+  showReviewHighlights               Boolean  @default(true)
+  showPhotoSummary                   Boolean  @default(true)
+  photoSummaryLimit                  Int      @default(8)
+  showReviewerPhotos                 Boolean  @default(false)
+  layoutType                         String   @default("standard")
+  carouselCardsPerRow                Int      @default(3)
+  carouselAutoSlide                  Boolean  @default(false)
+  carouselAutoplaySpeed              Int      @default(4)
+  carouselShowArrows                 Boolean  @default(true)
+  carouselShowDots                   Boolean  @default(true)
+  reviewsPerPage                     Int      @default(5)
+  reviewsPerRow                      Int      @default(3)
+  sortDefault                        String   @default("newest")
+  createdAt                          DateTime @default(now())
+  updatedAt                          DateTime @updatedAt
 
   shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
 }
 
 model GoogleSeoSettings {
-  id                       String   @id @default(cuid())
-  shopDomain               String   @unique
-  seoRichSnippetsEnabled   Boolean  @default(false)
-  googleShoppingEnabled    Boolean  @default(false)
-  reviewsSiteEnabled       Boolean  @default(true)
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  id                     String   @id @default(cuid())
+  shopDomain             String   @unique
+  seoRichSnippetsEnabled Boolean  @default(false)
+  googleShoppingEnabled  Boolean  @default(false)
+  reviewsSiteEnabled     Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
 }
@@ -304,4 +309,84 @@ model MonthlyPlanUsage {
 
   @@unique([shopDomain, monthKey])
   @@index([shopDomain, monthKey])
+}
+
+model ReviewInvitationSettings {
+  id              String   @id @default(cuid())
+  shopDomain      String   @unique
+  enabled         Boolean  @default(false)
+  delayDays       Int      @default(14)
+  reminderEnabled Boolean  @default(false)
+  reminderDays    Int      @default(7)
+  emailSubject    String   @default("How was your recent purchase?")
+  emailHeading    String   @default("How was your purchase?")
+  emailBody       String   @default("We hope you are enjoying your purchase. Your feedback helps other customers make confident choices.")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
+}
+
+model ReviewInvitation {
+  id                    String    @id @default(cuid())
+  shopDomain            String
+  shopifyOrderId        String
+  orderName             String    @default("")
+  customerEmail         String
+  customerName          String    @default("")
+  status                String    @default("SCHEDULED")
+  skipReason            String    @default("")
+  scheduledAt           DateTime
+  expiresAt             DateTime
+  resendEmailId         String?
+  reminderResendEmailId String?
+  sentAt                DateTime?
+  deliveredAt           DateTime?
+  openedAt              DateTime?
+  clickedAt             DateTime?
+  reviewedAt            DateTime?
+  cancelledAt           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  shop  Shop                   @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
+  items ReviewInvitationItem[]
+
+  @@unique([shopDomain, shopifyOrderId])
+  @@index([shopDomain, status, scheduledAt])
+  @@index([shopDomain, createdAt])
+  @@index([resendEmailId])
+  @@index([reminderResendEmailId])
+  @@index([customerEmail])
+}
+
+model ReviewInvitationItem {
+  id            String   @id @default(cuid())
+  invitationId  String
+  productId     String
+  productHandle String   @default("")
+  productTitle  String
+  variantTitle  String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  invitation ReviewInvitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  review     ProductReview?
+
+  @@unique([invitationId, productId])
+  @@index([invitationId])
+}
+
+model ReviewInvitationSuppression {
+  id            String   @id @default(cuid())
+  shopDomain    String
+  customerEmail String
+  reason        String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
+
+  @@unique([shopDomain, customerEmail])
+  @@index([shopDomain])
 }
