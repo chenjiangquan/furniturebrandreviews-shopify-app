@@ -27,9 +27,9 @@ import {
 import { authenticate } from "~/shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shopDomain = session.shop;
-  const [settings, entitlements, invitations, groupedStatuses, elapsedScheduled] = await Promise.all([
+  const [settings, entitlements, invitations, groupedStatuses, elapsedScheduled, hasOrderScope] = await Promise.all([
     getReviewInvitationSettings(shopDomain),
     getShopEntitlements(shopDomain),
     prisma.reviewInvitation.findMany({
@@ -45,7 +45,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }),
     prisma.reviewInvitation.count({
       where: { shopDomain, status: "SCHEDULED", scheduledAt: { lte: new Date() } }
-    })
+    }),
+    hasReadOrdersScope(admin, session.scope)
   ]);
   const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
   const monthlyUsage = await prisma.reviewInvitation.count({
@@ -63,7 +64,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     settings,
     isPro: entitlements.isPro,
-    hasOrderScope: String(session.scope || "").split(",").includes("read_orders"),
+    hasOrderScope,
     monthlyUsage,
     monthlyLimit: entitlements.isPro ? PRO_MONTHLY_INVITATION_LIMIT : FREE_MONTHLY_INVITATION_LIMIT,
     stats: {
@@ -90,7 +91,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const form = await request.formData();
   const intent = String(form.get("intent") || "");
 
@@ -107,7 +108,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return { ok: false, intent, message: "", error: "Unsupported action." };
     }
 
-    const hasOrderScope = String(session.scope || "").split(",").includes("read_orders");
+    const hasOrderScope = await hasReadOrdersScope(admin, session.scope);
     const entitlements = await getShopEntitlements(session.shop);
     const enabled = form.get("enabled") === "true";
     if (enabled && !hasOrderScope) {
@@ -202,13 +203,17 @@ export default function ReviewInvitationsPage() {
           <input type="hidden" name="reminderEnabled" value={String(reminderEnabled)} />
           <Card>
             <BlockStack gap="500">
-              <BlockStack gap="200">
+              <InlineStack align="space-between" blockAlign="center" gap="300">
                 <Text as="h2" variant="headingLg">Automatic requests</Text>
+                <Badge tone={enabled ? "success" : "attention"}>{enabled ? "Active" : "Paused"}</Badge>
+              </InlineStack>
+              <BlockStack gap="200">
                 <Checkbox
-                  label="Send a review invitation after an order is fulfilled"
+                  label="Enable automatic review invitations"
                   checked={enabled}
                   disabled={!data.hasOrderScope}
                   onChange={setEnabled}
+                  helpText="Check and save to start. Uncheck and save to pause; invitations that have not been sent yet will be cancelled."
                 />
               </BlockStack>
               <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
@@ -250,7 +255,13 @@ export default function ReviewInvitationsPage() {
               <TextField label="Email heading" name="emailHeading" value={emailHeading} onChange={setEmailHeading} maxLength={160} autoComplete="off" />
               <TextField label="Email message" name="emailBody" value={emailBody} onChange={setEmailBody} maxLength={1000} multiline={4} autoComplete="off" />
               <InlineStack align="end">
-                <Button submit variant="primary" loading={busy}>Save settings</Button>
+                <Button submit variant="primary" loading={busy}>
+                  {!data.settings.enabled && enabled
+                    ? "Start invitations"
+                    : data.settings.enabled && !enabled
+                      ? "Pause invitations"
+                      : "Save settings"}
+                </Button>
               </InlineStack>
             </BlockStack>
           </Card>
@@ -322,6 +333,34 @@ function requiredText(value: FormDataEntryValue | null, max: number, label: stri
   if (!text) throw new Response(`${label} is required.`, { status: 400 });
   if (text.length > max) throw new Response(`${label} must be ${max} characters or fewer.`, { status: 400 });
   return text;
+}
+
+async function hasReadOrdersScope(
+  admin: { graphql: (query: string) => Promise<Response> },
+  sessionScope: string | null | undefined
+) {
+  try {
+    const response = await admin.graphql(`#graphql
+      query CurrentAppAccessScopes {
+        currentAppInstallation {
+          accessScopes { handle }
+        }
+      }
+    `);
+    if (!response.ok) throw new Error(`Shopify access scope query failed (${response.status})`);
+    const payload = await response.json() as {
+      data?: { currentAppInstallation?: { accessScopes?: Array<{ handle?: string }> } };
+    };
+    return Boolean(
+      payload.data?.currentAppInstallation?.accessScopes?.some((scope) => scope.handle === "read_orders")
+    );
+  } catch (error) {
+    console.error("Unable to verify Shopify order access", error);
+    return String(sessionScope || "")
+      .split(",")
+      .map((scope) => scope.trim())
+      .includes("read_orders");
+  }
 }
 
 function canSend(status: string, scheduledAt: string) {
